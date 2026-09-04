@@ -1,0 +1,20 @@
+[Unit]
+Description=Zima Display HDMI renderer
+After=systemd-logind.service local-fs.target
+PartOf=zima-display.service
+Conflicts=getty@tty1.service
+
+[Service]
+Type=simple
+ExecStart=/usr/libexec/zima-display/start-renderer
+Restart=on-failure
+RestartSec=2
+KillMode=control-group
+SupplementaryGroups=video render audio
+TTYPath=/dev/tty1
+StandardInput=tty-force
+StandardOutput=journal
+StandardError=journal
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes

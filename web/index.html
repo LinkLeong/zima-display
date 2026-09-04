@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <title>Zima Display</title>
+    <link rel="icon" type="image/svg+xml" href="appicon.svg">
+    <link rel="stylesheet" href="styles.css?v=0.2.0">
+  </head>
+  <body>
+    <div class="grain" aria-hidden="true"></div>
+    <header class="topbar reveal">
+      <a class="brand" href="#" aria-label="Zima Display">
+        <span class="brand-mark"><i></i><i></i></span>
+        <span><b>ZIMA</b> DISPLAY</span>
+      </a>
+      <div class="topbar-status">
+        <label class="language-picker">
+          <span data-i18n="language.label">语言</span>
+          <select id="languageSelect" aria-label="界面语言" data-i18n-aria-label="language.aria">
+            <option value="zh-CN">简体中文</option>
+            <option value="en-US">English</option>
+          </select>
+        </label>
+        <span id="connectionBadge" class="signal-badge offline"><i></i><span data-i18n="status.connecting">服务连接中</span></span>
+        <span id="headerClock" class="header-clock">--:--</span>
+        <button id="settingsButton" class="icon-button" type="button" aria-label="打开设置" data-i18n-aria-label="settings.open">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.25A3.75 3.75 0 1 0 12 15.75 3.75 3.75 0 0 0 12 8.25Zm8.25 3.75a6.5 6.5 0 0 0-.09-1.08l2.07-1.62-2-3.46-2.53 1.02a8.48 8.48 0 0 0-1.86-1.08L13.46 3h-4l-.38 2.73c-.67.27-1.3.63-1.87 1.08L4.69 5.84l-2 3.46 2.06 1.62a8.3 8.3 0 0 0 0 2.16L2.69 14.7l2 3.46 2.52-.97c.57.45 1.2.81 1.87 1.08L9.46 21h4l.38-2.73a8.48 8.48 0 0 0 1.86-1.08l2.53.97 2-3.46-2.07-1.62c.06-.36.09-.72.09-1.08Z"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero-grid">
+        <article class="screen-card reveal delay-1">
+          <div class="card-kicker"><span data-i18n="preview.liveOutput">实时输出</span><span id="connectorName">自动检测</span></div>
+          <div class="screen-preview" id="screenPreview">
+            <div class="preview-grid"></div>
+            <div class="preview-status">
+              <span id="previewMode">系统仪表盘</span>
+              <strong id="previewClock">--:--</strong>
+              <small id="previewTitle">Zima Display</small>
+            </div>
+            <div class="screen-foot">
+              <span id="displayState">等待显示器</span>
+              <span id="displayMode">首选分辨率</span>
+            </div>
+          </div>
+          <div class="now-playing">
+            <div>
+              <small data-i18n="player.nowPlaying">当前内容</small>
+              <strong id="mediaTitle">系统仪表盘</strong>
+              <span id="mediaPath">HDMI 输出由 Zima Display 管理</span>
+            </div>
+            <div class="transport">
+              <button type="button" data-action="previous" aria-label="上一个" data-i18n-aria-label="player.previous">&#9664;&#9664;</button>
+              <button id="playPauseButton" type="button" data-action="pause" class="transport-main" aria-label="暂停" data-i18n-aria-label="player.pause">&#10074;&#10074;</button>
+              <button type="button" data-action="next" aria-label="下一个" data-i18n-aria-label="player.next">&#9654;&#9654;</button>
+              <button type="button" data-action="stop" aria-label="停止" data-i18n-aria-label="player.stop">&#9632;</button>
+            </div>
+          </div>
+          <div class="progress-row">
+            <span id="positionTime">00:00</span>
+            <input id="progressRange" type="range" min="0" max="100" value="0" aria-label="播放进度" data-i18n-aria-label="player.progress">
+            <span id="durationTime">00:00</span>
+          </div>
+        </article>
+
+        <aside class="control-rail reveal delay-2">
+          <div class="rail-heading">
+            <span data-i18n="modes.heading">输出模式</span>
+            <small data-i18n="modes.hint">一键切换 HDMI 内容</small>
+          </div>
+          <button class="mode-button active" type="button" data-mode="dashboard">
+            <span class="mode-index">01</span><span><b data-i18n="modes.dashboard">系统仪表盘</b><small data-i18n="modes.dashboardHint">性能、存储与网络</small></span><i></i>
+          </button>
+          <button class="mode-button" type="button" data-mode="clock">
+            <span class="mode-index">02</span><span><b data-i18n="modes.clock">环境时钟</b><small data-i18n="modes.clockHint">低干扰常亮信息</small></span><i></i>
+          </button>
+          <button class="mode-button" type="button" data-mode="black">
+            <span class="mode-index">03</span><span><b data-i18n="modes.black">黑屏待机</b><small data-i18n="modes.blackHint">播放器保持在线</small></span><i></i>
+          </button>
+          <button class="mode-button terminal" type="button" data-mode="terminal">
+            <span class="mode-index">04</span><span><b data-i18n="modes.terminal">恢复终端</b><small data-i18n="modes.terminalHint">释放 HDMI 与 TTY1</small></span><i></i>
+          </button>
+          <div class="volume-block">
+            <div><span data-i18n="player.volume">HDMI 音量</span><b id="volumeValue">70%</b></div>
+            <input id="volumeRange" type="range" min="0" max="100" value="70" aria-label="HDMI 音量" data-i18n-aria-label="player.volume">
+          </div>
+        </aside>
+      </section>
+
+      <section class="metrics-grid reveal delay-3" aria-label="系统指标" data-i18n-aria-label="metrics.aria">
+        <article class="metric-card accent">
+          <span data-i18n="metrics.cpu">CPU 负载</span><strong id="cpuMetric">--</strong><small id="loadMetric">负载 --</small><div class="meter"><i id="cpuBar"></i></div>
+        </article>
+        <article class="metric-card">
+          <span data-i18n="metrics.memory">内存</span><strong id="memoryMetric">--</strong><small id="memoryDetail">-- / --</small><div class="meter"><i id="memoryBar"></i></div>
+        </article>
+        <article class="metric-card">
+          <span data-i18n="metrics.storage">存储</span><strong id="diskMetric">--</strong><small id="diskDetail">-- / --</small><div class="meter amber"><i id="diskBar"></i></div>
+        </article>
+        <article class="metric-card compact">
+          <span data-i18n="metrics.network">网络</span><div><b>&darr; <em id="networkDown">--</em></b><b>&uarr; <em id="networkUp">--</em></b></div><small id="ipAddress">等待网络</small>
+        </article>
+        <article class="metric-card compact">
+          <span data-i18n="metrics.thermal">温度 / GPU</span><div><b><em id="temperatureMetric">--</em>&deg;C</b></div><small id="gpuName">自动检测</small>
+        </article>
+      </section>
+
+      <section class="media-panel reveal delay-4">
+        <div class="section-heading">
+          <div><span data-i18n="media.kicker">媒体控制台</span><h2 data-i18n="media.heading">媒体与播放队列</h2></div>
+          <div class="section-actions">
+            <button id="uploadButton" class="button ghost" type="button" data-i18n="media.upload">上传媒体</button>
+            <input id="uploadInput" type="file" accept="video/*,image/*" hidden>
+            <button id="playSelectedButton" class="button primary" type="button" disabled><span data-i18n="media.playSelected">播放已选</span> <span id="selectedCount">0</span></button>
+          </div>
+        </div>
+        <div class="url-player">
+          <label for="urlInput" data-i18n="media.networkMedia">网络媒体</label>
+          <input id="urlInput" type="url" placeholder="https://... 或 rtsp://..." data-i18n-placeholder="media.urlPlaceholder">
+          <button id="playUrlButton" class="button dark" type="button" data-i18n="media.playNow">立即播放</button>
+        </div>
+        <div class="browser-toolbar">
+          <button id="parentButton" type="button" disabled aria-label="返回上级" data-i18n-aria-label="media.parent">&#8592;</button>
+          <code id="currentPath">媒体根目录</code>
+          <button id="refreshMediaButton" type="button" data-i18n="media.refresh">刷新</button>
+        </div>
+        <div id="mediaList" class="media-list">
+          <div class="empty-state" data-i18n="media.loading">正在读取媒体目录...</div>
+        </div>
+      </section>
+    </main>
+
+    <dialog id="settingsDialog" class="settings-dialog">
+      <form id="settingsForm" method="dialog">
+        <div class="dialog-heading"><div><span data-i18n="settings.kicker">设备策略</span><h2 data-i18n="settings.heading">显示设置</h2></div><button id="closeSettingsButton" class="icon-button" type="button" aria-label="关闭" data-i18n-aria-label="common.close">&times;</button></div>
+        <label><span data-i18n="settings.defaultMode">开机默认模式</span><select id="defaultModeInput"><option value="dashboard" data-i18n="modes.dashboard">系统仪表盘</option><option value="clock" data-i18n="modes.clock">环境时钟</option><option value="black" data-i18n="modes.black">黑屏待机</option><option value="terminal" data-i18n="modes.systemTerminal">系统终端</option></select></label>
+        <label><span data-i18n="settings.backend">显示后端</span><select id="backendInput"><option value="auto" data-i18n="settings.backendAuto">自动：Wayland / DRM 回退</option><option value="wayland" data-i18n="settings.backendWayland">仅 Wayland</option><option value="drm" data-i18n="settings.backendDrm">仅 DRM</option></select></label>
+        <label><span data-i18n="settings.audioDevice">HDMI 音频设备</span><input id="audioDeviceInput" type="text" placeholder="auto"></label>
+        <label><span data-i18n="settings.dashboardLanguage">HDMI 仪表盘语言</span><select id="dashboardLanguageInput"><option value="zh-CN">简体中文</option><option value="en-US">English</option></select></label>
+        <label><span data-i18n="settings.dashboardTitle">仪表盘标题</span><input id="dashboardTitleInput" type="text" maxlength="64"></label>
+        <label><span data-i18n="settings.mediaRoots">媒体目录</span><textarea id="mediaRootsInput" rows="4" spellcheck="false"></textarea><small data-i18n="settings.mediaRootsHint">每行一个目录，仅允许 /DATA、/media、/mnt 下的路径。</small></label>
+        <label class="toggle-row"><input id="autoStartInput" type="checkbox"><span><b data-i18n="settings.autoStart">开机接管 HDMI</b><small data-i18n="settings.autoStartHint">关闭后开机保留系统终端</small></span></label>
+        <div class="dialog-actions"><button id="cancelSettingsButton" class="button ghost" type="button" data-i18n="common.cancel">取消</button><button class="button primary" type="submit" data-i18n="common.save">保存设置</button></div>
+      </form>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script src="app.js?v=0.2.0"></script>
+  </body>
+</html>

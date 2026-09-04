@@ -1,0 +1,111 @@
+#!/bin/sh
+set -eu
+
+RUNTIME_DIR=/run/zima-display
+DATA_DIR=/DATA/AppData/zima-display
+ENV_FILE="$RUNTIME_DIR/renderer.env"
+SOCKET="$RUNTIME_DIR/mpv.sock"
+LOG_DIR="$DATA_DIR/logs"
+
+mkdir -p "$RUNTIME_DIR" "$LOG_DIR" "$DATA_DIR/runtime"
+chmod 0700 "$RUNTIME_DIR"
+rm -f "$SOCKET"
+
+ZIMA_DISPLAY_BACKEND=auto
+ZIMA_DISPLAY_AUDIO_DEVICE=auto
+ZIMA_DISPLAY_RESOLUTION=auto
+ZIMA_DISPLAY_VOLUME=70
+if [ -r "$ENV_FILE" ]; then
+    . "$ENV_FILE"
+fi
+
+export XDG_RUNTIME_DIR="$RUNTIME_DIR"
+export ZIMA_DISPLAY_METRICS="$DATA_DIR/runtime/metrics.json"
+export ZIMA_DISPLAY_CONFIG="$DATA_DIR/config.json"
+
+set -- \
+    --no-config \
+    --idle=yes \
+    --force-window=immediate \
+    --keep-open=yes \
+    --fullscreen \
+    --no-border \
+    --no-terminal \
+    --cursor-autohide=always \
+    --input-ipc-server="$SOCKET" \
+    --hwdec=auto-safe \
+    --image-display-duration=inf \
+    --volume="$ZIMA_DISPLAY_VOLUME"
+
+if [ "$ZIMA_DISPLAY_AUDIO_DEVICE" != auto ]; then
+    set -- "$@" --audio-device="$ZIMA_DISPLAY_AUDIO_DEVICE"
+fi
+if [ "$ZIMA_DISPLAY_RESOLUTION" != auto ]; then
+    set -- "$@" --drm-mode="$ZIMA_DISPLAY_RESOLUTION"
+fi
+
+WESTON_PID=
+cleanup() {
+    if [ -n "$WESTON_PID" ]; then
+        kill "$WESTON_PID" 2>/dev/null || true
+        wait "$WESTON_PID" 2>/dev/null || true
+    fi
+}
+trap cleanup EXIT
+trap 'exit 0' INT TERM
+
+display_connected() {
+    for status_file in /sys/class/drm/card*-*/status; do
+        [ -f "$status_file" ] || continue
+        [ "$(cat "$status_file" 2>/dev/null || true)" = connected ] && return 0
+    done
+    return 1
+}
+
+start_wayland() {
+    command -v weston >/dev/null 2>&1 || return 1
+    rm -f "$RUNTIME_DIR"/wayland-*
+    weston --backend=drm-backend.so --tty=1 --idle-time=0 --log="$LOG_DIR/weston.log" &
+    WESTON_PID=$!
+    count=0
+    while [ "$count" -lt 40 ]; do
+        if [ -S "$RUNTIME_DIR/wayland-0" ]; then
+            export WAYLAND_DISPLAY=wayland-0
+            mpv "$@" --vo=gpu-next --gpu-context=wayland
+            result=$?
+            cleanup
+            WESTON_PID=
+            return "$result"
+        fi
+        if ! kill -0 "$WESTON_PID" 2>/dev/null; then
+            return 1
+        fi
+        count=$((count + 1))
+        sleep 0.25
+    done
+    return 1
+}
+
+while :; do
+    while ! display_connected; do
+        sleep 2
+    done
+
+    if [ "$ZIMA_DISPLAY_BACKEND" = wayland ]; then
+        start_wayland "$@" || true
+        sleep 2
+        continue
+    fi
+
+    if [ "$ZIMA_DISPLAY_BACKEND" = auto ]; then
+        if start_wayland "$@"; then
+            sleep 2
+            continue
+        fi
+        cleanup
+        WESTON_PID=
+    fi
+
+    mpv "$@" --vo=gpu-next --gpu-context=drm || true
+    sleep 2
+done

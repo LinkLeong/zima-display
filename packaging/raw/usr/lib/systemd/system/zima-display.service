@@ -1,0 +1,15 @@
+[Unit]
+Description=Zima Display control service
+After=local-fs.target casaos-gateway.service casaos-user-service.service
+Wants=casaos-gateway.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/zima-displayd
+Restart=always
+RestartSec=3
+UMask=0022
+
+[Install]
+WantedBy=multi-user.target

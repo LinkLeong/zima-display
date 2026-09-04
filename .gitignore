@@ -1,0 +1,10 @@
+.build/
+dist/
+.DS_Store
+.opskat/
+.idea/
+.vscode/
+*.log
+*.swp
+coverage.out
+zima-displayd

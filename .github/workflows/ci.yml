@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install packaging tools
+        run: sudo apt-get update && sudo apt-get install -y squashfs-tools
+
+      - name: Check formatting
+        run: test -z "$(find cmd internal -name '*.go' -type f -exec gofmt -l {} +)"
+
+      - name: Run Go tests
+        run: go test ./...
+
+      - name: Check frontend syntax
+        run: |
+          node --check web/app.js
+          node scripts/check-i18n.mjs
+
+      - name: Check shell syntax
+        run: sh -n scripts/*.sh packaging/raw/usr/libexec/zima-display/start-renderer
+
+      - name: Build native package
+        run: ./scripts/build.sh amd64
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: zima-display-amd64
+          path: |
+            dist/zima-display.raw
+            dist/zima-display-stage.tar.gz

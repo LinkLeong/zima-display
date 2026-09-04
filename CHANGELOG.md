@@ -1,0 +1,27 @@
+# Changelog
+
+All notable changes to this project are documented in this file. The project follows [Semantic Versioning](https://semver.org/).
+
+## [Unreleased]
+
+## [0.2.0] - 2026-09-04
+
+### Added
+
+- Simplified Chinese and English browser UI with browser detection and a saved manual preference.
+- Independent Simplified Chinese and English language setting for the HDMI dashboard and clock.
+- GitHub-ready bilingual documentation, CI, contribution and security guides.
+
+### Changed
+
+- Documented direct DRM as the recommended Intel ZimaOS renderer.
+- Removed the unused legacy mpv Lua renderer from the package.
+- Removed the private development host from the deployment script defaults.
+
+## [0.1.8] - 2026-09-04
+
+### Fixed
+
+- Replaced the unavailable mpv Lua integration with a Go-generated ASS overlay over JSON IPC.
+- Kept generated HDMI modes active with a low-frame-rate black video source.
+- Fixed renderer shutdown, stale socket detection and multi-event ASS rendering.

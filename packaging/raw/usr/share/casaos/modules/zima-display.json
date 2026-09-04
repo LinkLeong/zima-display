@@ -1,0 +1,29 @@
+{
+  "name": "zima-display",
+  "ui": {
+    "name": "zima-display",
+    "title": {
+      "en_us": "Zima Display",
+      "zh_cn": "HDMI 显示"
+    },
+    "prefetch": true,
+    "show": true,
+    "entry": "/modules/zima-display/index.html",
+    "icon": "/modules/zima-display/appicon.svg",
+    "description": "Display",
+    "formality": {
+      "type": "newtab",
+      "props": {
+        "width": "100vh",
+        "height": "100vh",
+        "hasModalCard": true,
+        "animation": "zoom-in"
+      }
+    }
+  },
+  "services": [
+    {
+      "name": "zima-display"
+    }
+  ]
+}
