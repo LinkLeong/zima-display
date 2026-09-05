@@ -26,17 +26,26 @@ const (
 )
 
 type Status struct {
-	Mode          string  `json:"mode"`
-	RendererReady bool    `json:"renderer_ready"`
-	Paused        bool    `json:"paused"`
-	Position      float64 `json:"position_seconds"`
-	Duration      float64 `json:"duration_seconds"`
-	Volume        float64 `json:"volume"`
-	MediaTitle    string  `json:"media_title,omitempty"`
-	Path          string  `json:"path,omitempty"`
-	PlaylistIndex int     `json:"playlist_index"`
-	PlaylistCount int     `json:"playlist_count"`
-	LastError     string  `json:"last_error,omitempty"`
+	Mode          string              `json:"mode"`
+	RendererReady bool                `json:"renderer_ready"`
+	Paused        bool                `json:"paused"`
+	Position      float64             `json:"position_seconds"`
+	Duration      float64             `json:"duration_seconds"`
+	Volume        float64             `json:"volume"`
+	MediaTitle    string              `json:"media_title,omitempty"`
+	Path          string              `json:"path,omitempty"`
+	PlaylistIndex int                 `json:"playlist_index"`
+	PlaylistCount int                 `json:"playlist_count"`
+	LastError     string              `json:"last_error,omitempty"`
+	Presentation  *PresentationStatus `json:"presentation,omitempty"`
+}
+
+type PresentationStatus struct {
+	ID        string `json:"id"`
+	Title     string `json:"title"`
+	Kind      string `json:"kind"`
+	Page      int    `json:"page"`
+	PageCount int    `json:"page_count"`
 }
 
 type commandRunner interface {
@@ -55,17 +64,22 @@ func (execRunner) Output(ctx context.Context, name string, args ...string) ([]by
 }
 
 type Manager struct {
-	mu          sync.Mutex
-	socketPath  string
-	runtimePath string
-	config      func() config.Config
-	runner      commandRunner
-	mode        string
-	lastError   string
-	snapshot    metrics.Snapshot
-	overlayConn net.Conn
-	overlayRead *bufio.Reader
-	requestID   atomic.Int64
+	mu                sync.Mutex
+	socketPath        string
+	runtimePath       string
+	config            func() config.Config
+	runner            commandRunner
+	mode              string
+	lastError         string
+	snapshot          metrics.Snapshot
+	overlayConn       net.Conn
+	overlayRead       *bufio.Reader
+	requestID         atomic.Int64
+	presentationID    string
+	presentationTitle string
+	presentationKind  string
+	presentationPages []string
+	presentationIndex int
 }
 
 func New(socketPath, runtimePath string, provider func() config.Config) *Manager {
@@ -93,6 +107,7 @@ func (m *Manager) SetMode(ctx context.Context, mode string) error {
 		if err := m.runner.Run(stopCtx, "systemctl", "start", "getty@tty1.service"); err != nil {
 			return m.fail(err)
 		}
+		m.clearPresentationLocked()
 		m.mode = mode
 		m.lastError = ""
 		return nil
@@ -106,6 +121,7 @@ func (m *Manager) SetMode(ctx context.Context, mode string) error {
 			return m.fail(err)
 		}
 	}
+	m.clearPresentationLocked()
 	m.mode = mode
 	m.lastError = ""
 	return nil
@@ -130,7 +146,52 @@ func (m *Manager) Play(ctx context.Context, targets []string) error {
 			return m.fail(err)
 		}
 	}
+	m.clearPresentationLocked()
 	m.mode = "video"
+	m.lastError = ""
+	return nil
+}
+
+func (m *Manager) Present(ctx context.Context, id, title, kind string, pages []string) error {
+	if len(pages) == 0 {
+		return errors.New("presentation contains no pages")
+	}
+	if kind != "images" && kind != "text" {
+		return fmt.Errorf("unsupported presentation kind %q", kind)
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := m.ensureRendererLocked(ctx); err != nil {
+		return m.fail(err)
+	}
+	if kind == "text" {
+		if err := m.send(ctx, []any{"loadfile", dashboardVideoSource, "replace"}, nil); err != nil {
+			return m.fail(err)
+		}
+		if err := m.send(ctx, []any{"set_property", "pause", false}, nil); err != nil {
+			return m.fail(err)
+		}
+		if err := m.setOverlayLocked(ctx, renderDocument(title, pages[0], 0, len(pages))); err != nil {
+			return m.fail(err)
+		}
+	} else {
+		m.closeOverlayLocked()
+		for index, page := range pages {
+			mode := "append-play"
+			if index == 0 {
+				mode = "replace"
+			}
+			if err := m.send(ctx, []any{"loadfile", page, mode}, nil); err != nil {
+				return m.fail(err)
+			}
+		}
+	}
+	m.presentationID = id
+	m.presentationTitle = title
+	m.presentationKind = kind
+	m.presentationPages = append([]string(nil), pages...)
+	m.presentationIndex = 0
+	m.mode = "presentation"
 	m.lastError = ""
 	return nil
 }
@@ -150,6 +211,7 @@ func (m *Manager) Stop(ctx context.Context) error {
 	if err := m.showGeneratedModeLocked(ctx, "dashboard"); err != nil {
 		return m.fail(err)
 	}
+	m.clearPresentationLocked()
 	m.mode = "dashboard"
 	m.lastError = ""
 	return nil
@@ -261,11 +323,33 @@ func (m *Manager) SetVolume(ctx context.Context, volume float64) error {
 }
 
 func (m *Manager) Next(ctx context.Context) error {
-	return m.simpleCommand(ctx, []any{"playlist-next", "force"})
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.mode == "presentation" && m.presentationKind == "text" {
+		if m.presentationIndex < len(m.presentationPages)-1 {
+			m.presentationIndex++
+		}
+		return m.setOverlayLocked(ctx, renderDocument(m.presentationTitle, m.presentationPages[m.presentationIndex], m.presentationIndex, len(m.presentationPages)))
+	}
+	if err := m.send(ctx, []any{"playlist-next", "force"}, nil); err != nil {
+		return m.fail(err)
+	}
+	return nil
 }
 
 func (m *Manager) Previous(ctx context.Context) error {
-	return m.simpleCommand(ctx, []any{"playlist-prev", "force"})
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.mode == "presentation" && m.presentationKind == "text" {
+		if m.presentationIndex > 0 {
+			m.presentationIndex--
+		}
+		return m.setOverlayLocked(ctx, renderDocument(m.presentationTitle, m.presentationPages[m.presentationIndex], m.presentationIndex, len(m.presentationPages)))
+	}
+	if err := m.send(ctx, []any{"playlist-prev", "force"}, nil); err != nil {
+		return m.fail(err)
+	}
+	return nil
 }
 
 func (m *Manager) Status(ctx context.Context) Status {
@@ -293,7 +377,20 @@ func (m *Manager) Status(ctx context.Context) Status {
 	status.Path, _ = properties["path"].(string)
 	status.PlaylistIndex = int(asFloat(properties["playlist-pos"]))
 	status.PlaylistCount = int(asFloat(properties["playlist-count"]))
-	if m.mode != "video" {
+	if m.mode == "presentation" {
+		page := m.presentationIndex
+		if m.presentationKind == "images" && status.PlaylistIndex >= 0 {
+			page = status.PlaylistIndex
+			m.presentationIndex = page
+		}
+		status.Presentation = &PresentationStatus{
+			ID: m.presentationID, Title: m.presentationTitle, Kind: m.presentationKind,
+			Page: page + 1, PageCount: len(m.presentationPages),
+		}
+		status.MediaTitle = m.presentationTitle
+		status.Position = 0
+		status.Duration = 0
+	} else if m.mode != "video" {
 		status.Position = 0
 		status.Duration = 0
 		status.MediaTitle = ""
@@ -304,13 +401,12 @@ func (m *Manager) Status(ctx context.Context) Status {
 	return status
 }
 
-func (m *Manager) simpleCommand(ctx context.Context, command []any) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if err := m.send(ctx, command, nil); err != nil {
-		return m.fail(err)
-	}
-	return nil
+func (m *Manager) clearPresentationLocked() {
+	m.presentationID = ""
+	m.presentationTitle = ""
+	m.presentationKind = ""
+	m.presentationPages = nil
+	m.presentationIndex = 0
 }
 
 func (m *Manager) ensureRendererLocked(ctx context.Context) error {

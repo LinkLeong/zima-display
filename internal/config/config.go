@@ -1,6 +1,7 @@
 package config
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -27,14 +28,20 @@ type Dashboard struct {
 	RefreshIntervalMS int    `json:"refresh_interval_ms"`
 }
 
+type Automation struct {
+	Enabled bool   `json:"enabled"`
+	Token   string `json:"token"`
+}
+
 type Config struct {
-	DataDir     string    `json:"data_dir"`
-	MediaRoots  []string  `json:"media_roots"`
-	DefaultMode string    `json:"default_mode"`
-	AutoStart   bool      `json:"auto_start_display"`
-	Volume      int       `json:"volume"`
-	Renderer    Renderer  `json:"renderer"`
-	Dashboard   Dashboard `json:"dashboard"`
+	DataDir     string     `json:"data_dir"`
+	MediaRoots  []string   `json:"media_roots"`
+	DefaultMode string     `json:"default_mode"`
+	AutoStart   bool       `json:"auto_start_display"`
+	Volume      int        `json:"volume"`
+	Renderer    Renderer   `json:"renderer"`
+	Dashboard   Dashboard  `json:"dashboard"`
+	Automation  Automation `json:"automation"`
 }
 
 type Store struct {
@@ -47,6 +54,19 @@ func NewStore(path string) (*Store, error) {
 	cfg, err := Load(path)
 	if err != nil {
 		return nil, err
+	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		return nil, fmt.Errorf("secure configuration file: %w", err)
+	}
+	if cfg.Automation.Token == "" {
+		cfg.Automation.Token, err = newToken()
+		if err != nil {
+			return nil, err
+		}
+		cfg.Automation.Enabled = true
+		if err := Save(path, cfg); err != nil {
+			return nil, err
+		}
 	}
 	return &Store{path: path, cfg: cfg}, nil
 }
@@ -87,6 +107,7 @@ func Default() Config {
 			Language:          "zh-CN",
 			RefreshIntervalMS: 1000,
 		},
+		Automation: Automation{Enabled: true},
 	}
 }
 
@@ -128,7 +149,10 @@ func Save(path string, cfg Config) error {
 		return err
 	}
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, append(data, '\n'), 0o644); err != nil {
+	if err := os.WriteFile(tmp, append(data, '\n'), 0o600); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmp, 0o600); err != nil {
 		return err
 	}
 	return os.Rename(tmp, path)
@@ -200,4 +224,16 @@ func oneOf(value string, choices ...string) bool {
 func clone(cfg Config) Config {
 	cfg.MediaRoots = append([]string(nil), cfg.MediaRoots...)
 	return cfg
+}
+
+func newToken() (string, error) {
+	data := make([]byte, 24)
+	if _, err := rand.Read(data); err != nil {
+		return "", fmt.Errorf("generate automation token: %w", err)
+	}
+	const alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	for index := range data {
+		data[index] = alphabet[int(data[index])%len(alphabet)]
+	}
+	return string(data), nil
 }

@@ -39,6 +39,32 @@ func TestStoreReturnsIndependentCopy(t *testing.T) {
 	}
 }
 
+func TestStoreGeneratesPersistentAutomationToken(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ConfigName)
+	store, err := NewStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := store.Get().Automation.Token
+	if len(first) < 24 {
+		t.Fatalf("automation token is unexpectedly short: %q", first)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("config permissions = %o, want 600", info.Mode().Perm())
+	}
+	reloaded, err := NewStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second := reloaded.Get().Automation.Token; second != first {
+		t.Fatalf("automation token changed after reload: %q != %q", second, first)
+	}
+}
+
 func TestLoadOlderConfigDefaultsDashboardLanguage(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ConfigName)
 	data := `{

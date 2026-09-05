@@ -4,6 +4,22 @@ All notable changes to this project are documented in this file. The project fol
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-05
+
+### Added
+
+- Added Bearer-authenticated presentation and automation APIs.
+- Added native HDMI document pages for Markdown and text-based presentation fallback.
+- Added image presentation archives with safe ZIP extraction and page navigation.
+- Added the cross-platform `zima-displayctl` automation client.
+- Added automatic discovery and one-click persistent Skill installation for the ZimaOS Store DeepSeek Harness container.
+- Added background installation of LibreOffice, Poppler and Noto CJK fonts inside the DSH container for full-fidelity PPTX/PDF conversion.
+
+### Changed
+
+- Extended player status and the Web UI with presentation title and page information.
+- Packaged `zima-displayctl` alongside the native Zima Display service.
+
 ## [0.2.1] - 2026-09-05
 
 ### Fixed

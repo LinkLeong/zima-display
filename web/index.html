@@ -7,7 +7,7 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>Zima Display</title>
     <link rel="icon" type="image/svg+xml" href="appicon.svg">
-    <link rel="stylesheet" href="styles.css?v=0.2.1">
+    <link rel="stylesheet" href="styles.css?v=0.3.0">
   </head>
   <body>
     <div class="grain" aria-hidden="true"></div>
@@ -110,6 +110,19 @@
         </article>
       </section>
 
+      <section class="integration-panel reveal delay-4">
+        <div class="integration-copy">
+          <span data-i18n="dsh.kicker">智能体集成</span>
+          <h2 data-i18n="dsh.heading">DeepSeek Harness</h2>
+          <p data-i18n="dsh.description">自动发现 ZimaOS 商店版 DSH，并安装持久化投屏 Skill。无需进入容器。</p>
+        </div>
+        <div class="integration-status">
+          <span class="integration-dot" aria-hidden="true"></span>
+          <strong id="dshState" data-i18n="dsh.checking">正在检查 DSH...</strong>
+        </div>
+        <button id="dshInstallButton" class="button primary" type="button" disabled data-i18n="dsh.install">一键安装 Skill</button>
+      </section>
+
       <section class="media-panel reveal delay-4">
         <div class="section-heading">
           <div><span data-i18n="media.kicker">媒体控制台</span><h2 data-i18n="media.heading">媒体与播放队列</h2></div>
@@ -150,6 +163,6 @@
     </dialog>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <script src="app.js?v=0.2.1"></script>
+    <script src="app.js?v=0.3.0"></script>
   </body>
 </html>

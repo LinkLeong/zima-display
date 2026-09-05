@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"log"
@@ -77,5 +78,47 @@ func TestMediaRootUsesLanguageNeutralUploadLabel(t *testing.T) {
 	}
 	if len(response.Entries) == 0 || response.Entries[0].Label != "uploads" {
 		t.Fatalf("upload root label = %#v, want uploads", response.Entries)
+	}
+}
+
+func TestAutomationEndpointsRequireBearerToken(t *testing.T) {
+	path := filepath.Join(t.TempDir(), config.ConfigName)
+	store, err := config.NewStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	controller := player.New(filepath.Join(t.TempDir(), "mpv.sock"), t.TempDir(), store.Get)
+	api := New(log.New(io.Discard, "", 0), store, controller, "test-version")
+	body := []byte(`{"title":"Demo","pages":["One"]}`)
+
+	unauthorized := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, apiPrefix+"/v1/presentations/text", bytes.NewReader(body))
+	api.Handler().ServeHTTP(unauthorized, request)
+	if unauthorized.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthorized request returned %d", unauthorized.Code)
+	}
+
+	authorized := httptest.NewRecorder()
+	request = httptest.NewRequest(http.MethodPost, apiPrefix+"/v1/presentations/text", bytes.NewReader(body))
+	request.Header.Set("Authorization", "Bearer "+store.Get().Automation.Token)
+	api.Handler().ServeHTTP(authorized, request)
+	if authorized.Code != http.StatusCreated {
+		t.Fatalf("authorized request returned %d: %s", authorized.Code, authorized.Body.String())
+	}
+}
+
+func TestStatusDoesNotExposeAutomationToken(t *testing.T) {
+	path := filepath.Join(t.TempDir(), config.ConfigName)
+	store, err := config.NewStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	controller := player.New(filepath.Join(t.TempDir(), "mpv.sock"), t.TempDir(), store.Get)
+	api := New(log.New(io.Discard, "", 0), store, controller, "test-version")
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, apiPrefix+"/status", nil)
+	api.Handler().ServeHTTP(recorder, request)
+	if bytes.Contains(recorder.Body.Bytes(), []byte(store.Get().Automation.Token)) {
+		t.Fatal("status response exposed the automation token")
 	}
 }

@@ -18,8 +18,10 @@ import (
 	"time"
 
 	"zima-display/internal/config"
+	"zima-display/internal/dsh"
 	"zima-display/internal/metrics"
 	"zima-display/internal/player"
+	"zima-display/internal/presentation"
 )
 
 const (
@@ -29,13 +31,15 @@ const (
 )
 
 type Server struct {
-	logger  *log.Logger
-	config  *config.Store
-	player  *player.Manager
-	version string
-	started time.Time
-	mu      sync.RWMutex
-	metrics metrics.Snapshot
+	logger        *log.Logger
+	config        *config.Store
+	player        *player.Manager
+	version       string
+	started       time.Time
+	mu            sync.RWMutex
+	metrics       metrics.Snapshot
+	presentations *presentation.Store
+	dshInstaller  *dsh.Installer
 }
 
 type statusResponse struct {
@@ -70,13 +74,25 @@ type mediaResponse struct {
 	Entries []mediaEntry `json:"entries"`
 }
 
+type textPresentationRequest struct {
+	Title  string   `json:"title"`
+	Source string   `json:"source,omitempty"`
+	Pages  []string `json:"pages"`
+}
+
+type dshInstallRequest struct {
+	BaseURL string `json:"base_url"`
+}
+
 func New(logger *log.Logger, store *config.Store, controller *player.Manager, version string) *Server {
 	return &Server{
-		logger:  logger,
-		config:  store,
-		player:  controller,
-		version: version,
-		started: time.Now(),
+		logger:        logger,
+		config:        store,
+		player:        controller,
+		version:       version,
+		started:       time.Now(),
+		presentations: presentation.New(filepath.Join(store.Get().DataDir, "presentations")),
+		dshInstaller:  dsh.New("/usr/bin/zima-displayctl"),
 	}
 }
 
@@ -94,7 +110,194 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc(apiPrefix+"/action", s.action)
 	mux.HandleFunc(apiPrefix+"/media", s.media)
 	mux.HandleFunc(apiPrefix+"/upload", s.upload)
+	mux.HandleFunc(apiPrefix+"/integration/dsh", s.dshIntegration)
+	mux.Handle(apiPrefix+"/v1/", s.automationAuth(http.HandlerFunc(s.automation)))
 	return s.middleware(mux)
+}
+
+func (s *Server) automation(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, apiPrefix+"/v1")
+	switch {
+	case path == "/presentations" && r.Method == http.MethodPost:
+		s.createImagePresentation(w, r)
+	case path == "/presentations/text" && r.Method == http.MethodPost:
+		s.createTextPresentation(w, r)
+	case strings.HasPrefix(path, "/presentations/"):
+		s.presentationResource(w, r, strings.TrimPrefix(path, "/presentations/"))
+	case path == "/presentation/status" && r.Method == http.MethodGet:
+		s.status(w, r)
+	case path == "/presentation/next" && r.Method == http.MethodPost:
+		s.presentationAction(w, r, "next")
+	case path == "/presentation/previous" && r.Method == http.MethodPost:
+		s.presentationAction(w, r, "previous")
+	case path == "/presentation/stop" && r.Method == http.MethodPost:
+		s.presentationAction(w, r, "stop")
+	case path == "/action" && r.Method == http.MethodPost:
+		s.action(w, r)
+	case path == "/upload" && r.Method == http.MethodPost:
+		s.upload(w, r)
+	default:
+		writeError(w, http.StatusNotFound, errors.New("automation endpoint not found"))
+	}
+}
+
+func (s *Server) automationAuth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cfg := s.config.Get()
+		if !cfg.Automation.Enabled {
+			writeError(w, http.StatusForbidden, errors.New("automation API is disabled"))
+			return
+		}
+		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if !dsh.TokenMatches(cfg.Automation.Token, token) {
+			w.Header().Set("WWW-Authenticate", "Bearer")
+			writeError(w, http.StatusUnauthorized, errors.New("invalid automation token"))
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) createTextPresentation(w http.ResponseWriter, r *http.Request) {
+	var request textPresentationRequest
+	if err := decodeJSON(w, r, &request); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	manifest, err := s.presentations.CreateText(request.Title, request.Source, request.Pages)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, manifest)
+}
+
+func (s *Server) createImagePresentation(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 2<<30)
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("parse presentation upload: %w", err))
+		return
+	}
+	file, header, err := r.FormFile("archive")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	defer file.Close()
+	tmp, err := os.CreateTemp(s.config.Get().DataDir, ".presentation-*.zip")
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath)
+	if _, err := io.Copy(tmp, file); err != nil {
+		tmp.Close()
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	if err := tmp.Close(); err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	title := r.FormValue("title")
+	if title == "" {
+		title = strings.TrimSuffix(header.Filename, filepath.Ext(header.Filename))
+	}
+	manifest, err := s.presentations.ImportZip(tmpPath, title, r.FormValue("source"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, manifest)
+}
+
+func (s *Server) presentationResource(w http.ResponseWriter, r *http.Request, resource string) {
+	parts := strings.Split(strings.Trim(resource, "/"), "/")
+	if len(parts) == 2 && parts[1] == "activate" && r.Method == http.MethodPost {
+		manifest, err := s.presentations.Get(parts[0])
+		if err != nil {
+			writeError(w, http.StatusNotFound, err)
+			return
+		}
+		var pages []string
+		if manifest.Kind == "text" {
+			pages, err = s.presentations.TextPages(manifest)
+		} else {
+			pages, err = s.presentations.PagePaths(manifest)
+		}
+		if err == nil {
+			ctx, cancel := context.WithTimeout(r.Context(), 25*time.Second)
+			defer cancel()
+			err = s.player.Present(ctx, manifest.ID, manifest.Title, manifest.Kind, pages)
+		}
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "presentation": manifest})
+		return
+	}
+	if len(parts) == 1 && r.Method == http.MethodDelete {
+		if err := s.presentations.Delete(parts[0]); err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+		return
+	}
+	writeError(w, http.StatusNotFound, errors.New("presentation endpoint not found"))
+}
+
+func (s *Server) presentationAction(w http.ResponseWriter, r *http.Request, name string) {
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	var err error
+	switch name {
+	case "next":
+		err = s.player.Next(ctx)
+	case "previous":
+		err = s.player.Previous(ctx)
+	case "stop":
+		err = s.player.Stop(ctx)
+	}
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Server) dshIntegration(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, s.dshInstaller.Status())
+	case http.MethodPost:
+		var request dshInstallRequest
+		if err := decodeJSON(w, r, &request); err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		parsed, err := url.Parse(strings.TrimRight(request.BaseURL, "/"))
+		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.RawQuery != "" || parsed.Fragment != "" {
+			writeError(w, http.StatusBadRequest, errors.New("base_url must be an HTTP or HTTPS origin with the /zima-display path"))
+			return
+		}
+		status, err := s.dshInstaller.Install(dsh.Config{BaseURL: parsed.String(), Token: s.config.Get().Automation.Token, Version: s.version})
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, status)
+	case http.MethodDelete:
+		if err := s.dshInstaller.Uninstall(); err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, s.dshInstaller.Status())
+	default:
+		methodNotAllowed(w, http.MethodGet, http.MethodPost, http.MethodDelete)
+	}
 }
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
@@ -120,28 +323,39 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 		ServiceUptime: time.Since(s.started).Seconds(),
 		Metrics:       snapshot,
 		Player:        s.player.Status(ctx),
-		Config:        s.config.Get(),
+		Config:        publicConfig(s.config.Get()),
 	})
 }
 
 func (s *Server) configuration(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		writeJSON(w, http.StatusOK, s.config.Get())
+		writeJSON(w, http.StatusOK, publicConfig(s.config.Get()))
 	case http.MethodPut:
 		var cfg config.Config
 		if err := decodeJSON(w, r, &cfg); err != nil {
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
+		current := s.config.Get()
+		if cfg.Automation.Token != "" && cfg.Automation.Token != current.Automation.Token {
+			writeError(w, http.StatusBadRequest, errors.New("automation token cannot be changed through the configuration API"))
+			return
+		}
+		cfg.Automation.Token = current.Automation.Token
 		if err := s.config.Replace(cfg); err != nil {
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, s.config.Get())
+		writeJSON(w, http.StatusOK, publicConfig(s.config.Get()))
 	default:
 		methodNotAllowed(w, http.MethodGet, http.MethodPut)
 	}
+}
+
+func publicConfig(cfg config.Config) config.Config {
+	cfg.Automation.Token = ""
+	return cfg
 }
 
 func (s *Server) action(w http.ResponseWriter, r *http.Request) {
@@ -333,7 +547,7 @@ func (s *Server) middleware(next http.Handler) http.Handler {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		if r.Method == http.MethodPost || r.Method == http.MethodPut {
-			if !strings.HasSuffix(r.URL.Path, "/upload") {
+			if !strings.HasSuffix(r.URL.Path, "/upload") && !strings.HasSuffix(r.URL.Path, "/presentations") {
 				r.Body = http.MaxBytesReader(w, r.Body, maxJSONBody)
 			}
 		}

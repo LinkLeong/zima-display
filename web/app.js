@@ -19,9 +19,10 @@ const translations = {
     'modes.black': '黑屏待机', 'modes.blackHint': '播放器保持在线',
     'modes.terminal': '恢复终端', 'modes.systemTerminal': '系统终端',
     'modes.terminalHint': '释放 HDMI 与 TTY1', 'modes.video': '媒体播放', 'modes.unknown': '未知模式',
+    'modes.presentation': '文档投屏',
     'modePreview.dashboard': '系统仪表盘', 'modePreview.clock': '环境时钟',
     'modePreview.black': '黑屏待机', 'modePreview.terminal': '系统终端',
-    'modePreview.video': '媒体播放', 'modePreview.unknown': '未知模式',
+    'modePreview.video': '媒体播放', 'modePreview.presentation': '文档投屏', 'modePreview.unknown': '未知模式',
     'metrics.aria': '系统指标', 'metrics.cpu': 'CPU 负载', 'metrics.load': '负载 {value}',
     'metrics.memory': '内存', 'metrics.storage': '存储', 'metrics.network': '网络',
     'metrics.thermal': '温度 / GPU', 'metrics.waitingNetwork': '等待网络',
@@ -37,6 +38,14 @@ const translations = {
     'media.play': '播放', 'media.open': '打开', 'media.playing': '正在播放 {name}',
     'media.openingNetwork': '正在打开网络媒体', 'media.loaded': '已载入 {count} 个媒体',
     'media.uploading': '正在上传 {name}', 'media.uploaded': '{name} 上传完成',
+    'dsh.kicker': '智能体集成', 'dsh.heading': 'DeepSeek Harness',
+    'dsh.description': '自动发现 ZimaOS 商店版 DSH，并安装持久化投屏 Skill。无需进入容器。',
+    'dsh.checking': '正在检查 DSH...', 'dsh.missing': '未检测到正在运行的 DSH 商店容器',
+    'dsh.ready': 'DSH 已就绪，可以安装投屏 Skill', 'dsh.installed': 'Skill {version} 已安装',
+    'dsh.converterInstalling': 'Skill 已安装，正在后台安装 PPT/PDF 转换组件',
+    'dsh.converterMissing': 'Skill 已安装，PPT/PDF 转换组件需要修复',
+    'dsh.install': '一键安装 Skill', 'dsh.update': '更新 Skill',
+    'dsh.installing': '正在安装 DSH Skill...', 'dsh.completed': 'DSH Skill 安装完成，刷新 DSH 页面即可使用',
     'settings.kicker': '设备策略', 'settings.heading': '显示设置',
     'settings.defaultMode': '开机默认模式', 'settings.backend': '显示后端',
     'settings.backendAuto': '自动：Wayland / DRM 回退', 'settings.backendWayland': '仅 Wayland',
@@ -68,10 +77,11 @@ const translations = {
     'modes.black': 'Black standby', 'modes.blackHint': 'Keep the renderer online',
     'modes.terminal': 'Restore terminal', 'modes.systemTerminal': 'System terminal',
     'modes.terminalHint': 'Release HDMI and TTY1', 'modes.video': 'Media playback',
+    'modes.presentation': 'Presentation',
     'modes.unknown': 'Unknown mode',
     'modePreview.dashboard': 'SYSTEM DASHBOARD', 'modePreview.clock': 'AMBIENT CLOCK',
     'modePreview.black': 'BLACK STANDBY', 'modePreview.terminal': 'SYSTEM TERMINAL',
-    'modePreview.video': 'MEDIA PLAYBACK', 'modePreview.unknown': 'UNKNOWN MODE',
+    'modePreview.video': 'MEDIA PLAYBACK', 'modePreview.presentation': 'PRESENTATION', 'modePreview.unknown': 'UNKNOWN MODE',
     'metrics.aria': 'System metrics', 'metrics.cpu': 'CPU LOAD', 'metrics.load': 'Load {value}',
     'metrics.memory': 'MEMORY', 'metrics.storage': 'STORAGE', 'metrics.network': 'NETWORK',
     'metrics.thermal': 'THERMAL / GPU', 'metrics.waitingNetwork': 'Waiting for network',
@@ -87,6 +97,14 @@ const translations = {
     'media.play': 'Play', 'media.open': 'Open', 'media.playing': 'Playing {name}',
     'media.openingNetwork': 'Opening network media', 'media.loaded': 'Loaded {count} media items',
     'media.uploading': 'Uploading {name}', 'media.uploaded': '{name} uploaded',
+    'dsh.kicker': 'AGENT INTEGRATION', 'dsh.heading': 'DeepSeek Harness',
+    'dsh.description': 'Automatically detect the ZimaOS Store DSH container and persistently install the display skill. No container shell required.',
+    'dsh.checking': 'Checking DSH...', 'dsh.missing': 'No running DSH Store container detected',
+    'dsh.ready': 'DSH is ready for the display skill', 'dsh.installed': 'Skill {version} is installed',
+    'dsh.converterInstalling': 'Skill installed; PPT/PDF converters are installing in the background',
+    'dsh.converterMissing': 'Skill installed; PPT/PDF converters need repair',
+    'dsh.install': 'Install Skill', 'dsh.update': 'Update Skill',
+    'dsh.installing': 'Installing the DSH skill...', 'dsh.completed': 'DSH skill installed. Refresh DSH to use it.',
     'settings.kicker': 'DEVICE POLICY', 'settings.heading': 'Display settings',
     'settings.defaultMode': 'Default mode at startup', 'settings.backend': 'Display backend',
     'settings.backendAuto': 'Auto: Wayland with DRM fallback', 'settings.backendWayland': 'Wayland only',
@@ -106,7 +124,7 @@ const translations = {
 const state = {
   status: null, media: null, selected: new Set(), poll: null, volumeTimer: null,
   locale: detectLocale(), serviceOnline: null, pendingDashboardLocale: null,
-  localeSync: Promise.resolve()
+  localeSync: Promise.resolve(), dshPoll: null
 };
 
 const $ = id => document.getElementById(id);
@@ -145,6 +163,7 @@ function setLocale(locale, syncDashboard = false) {
   if (state.serviceOnline !== null) setConnectionBadge(state.serviceOnline);
   if (state.status) renderStatus(state.status);
   if (state.media) renderMedia();
+  if ($('dshInstallButton')) loadDSHIntegration();
   if (syncDashboard) queueDashboardLocale(state.locale);
 }
 
@@ -260,8 +279,9 @@ function renderStatus(data) {
   setText('displayMode', display.modes?.[0] || t('preview.preferredMode'));
   $('screenPreview').classList.toggle('offline', !display.connected);
 
-  setText('mediaTitle', player.media_title || modeTitle(mode));
-  setText('mediaPath', player.path || (player.last_error ? t('player.error', { message: player.last_error }) : t('player.managed')));
+  setText('mediaTitle', player.presentation?.title || player.media_title || modeTitle(mode));
+  const presentationDetail = player.presentation ? `${player.presentation.page} / ${player.presentation.page_count}` : '';
+  setText('mediaPath', presentationDetail || player.path || (player.last_error ? t('player.error', { message: player.last_error }) : t('player.managed')));
   setText('positionTime', formatTime(player.position_seconds));
   setText('durationTime', formatTime(player.duration_seconds));
   $('progressRange').value = player.duration_seconds ? clamp(player.position_seconds / player.duration_seconds * 100, 0, 100) : 0;
@@ -287,6 +307,40 @@ function renderStatus(data) {
   setText('ipAddress', metrics.ip_addresses?.[0] || t('metrics.waitingNetwork'));
   setText('temperatureMetric', Math.round(metrics.temperature_c || gpu.temperature_c || 0));
   setText('gpuName', [gpu.vendor, gpu.name].filter(Boolean).join(' · ') || t('metrics.autoGraphics'));
+}
+
+async function loadDSHIntegration() {
+  const button = $('dshInstallButton');
+  clearTimeout(state.dshPoll);
+  try {
+    const status = await request('/integration/dsh');
+    button.disabled = !status.available;
+    button.dataset.installed = status.installed ? 'true' : 'false';
+    button.textContent = t(status.installed ? 'dsh.update' : 'dsh.install');
+    let message = status.installed ? t('dsh.installed', { version: status.version || '' }) : (status.available ? t('dsh.ready') : (status.error || t('dsh.missing')));
+    if (status.installed && status.converter_state === 'installing') message = t('dsh.converterInstalling');
+    if (status.installed && status.converter_state === 'missing') message = t('dsh.converterMissing');
+    setText('dshState', message);
+    if (status.converter_state === 'installing') state.dshPoll = setTimeout(loadDSHIntegration, 5000);
+  } catch (error) {
+    button.disabled = true;
+    setText('dshState', error.message);
+  }
+}
+
+async function installDSHSkill() {
+  const button = $('dshInstallButton');
+  button.disabled = true;
+  showToast(t('dsh.installing'));
+  try {
+    const baseURL = `${window.location.origin}/zima-display`;
+    await request('/integration/dsh', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ base_url: baseURL }) });
+    showToast(t('dsh.completed'));
+    await loadDSHIntegration();
+  } catch (error) {
+    showToast(error.message, true);
+    await loadDSHIntegration();
+  }
 }
 
 async function action(payload, successMessage) {
@@ -451,6 +505,7 @@ function bindEvents() {
   $('closeSettingsButton').addEventListener('click', () => $('settingsDialog').close());
   $('cancelSettingsButton').addEventListener('click', () => $('settingsDialog').close());
   $('settingsForm').addEventListener('submit', saveSettings);
+  $('dshInstallButton').addEventListener('click', installDSHSkill);
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -460,4 +515,5 @@ document.addEventListener('DOMContentLoaded', () => {
   setInterval(updateClock, 1000);
   refreshStatus();
   loadMedia();
+  loadDSHIntegration();
 });

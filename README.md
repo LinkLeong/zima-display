@@ -17,6 +17,8 @@ It is installed as a `zpkg` / `systemd-sysext` `.raw` package. Docker is not req
 - Playback, seek, playlist and HDMI volume controls.
 - Persistent configuration under `/DATA/AppData/zima-display`.
 - Renderer recovery and a boot watchdog for ZimaOS system extensions.
+- One-click DeepSeek Harness integration with automatic Store-container volume discovery.
+- Markdown, PPTX, PDF and image-deck presentation with page navigation.
 
 ## Requirements
 
@@ -50,6 +52,14 @@ http://<zimaos-host>/modules/zima-display/index.html
 4. Use the media panel to browse files, upload media, or play a network URL.
 
 The web UI follows the browser language on first use. A manual language selection synchronizes the web UI and HDMI dashboard, and is stored both in the browser and the device `config.json`.
+
+## DeepSeek Harness
+
+1. Install and start **DeepSeekHarness** from the ZimaOS App Store.
+2. Open Zima Display and click **Install Skill** in the DeepSeek Harness panel.
+3. Refresh DSH, then ask it to present generated Markdown, PPTX, PDF or images.
+
+The Skill and connection configuration are stored persistently under `/root/.dsh/skills/zima-display`. Zima Display discovers the actual dynamic `/DATA/AppData` bind mount automatically. LibreOffice, Poppler and Noto CJK fonts are installed in the DSH container in the background for PPTX/PDF rendering. Click **Update Skill** after a DSH container upgrade if those converters need repair.
 
 ## Development
 
@@ -104,9 +114,9 @@ zima-display-renderer.service
 
 The HTTP service listens on loopback and registers through CasaOS Gateway, so its control API is not directly exposed to the LAN.
 
-## Automation roadmap
+## Automation
 
-The proposed DeepSeekHarness workflow for generated PPTX, Markdown and PDF content is documented in the [Chinese integration design](docs/deepseekharness-integration.zh-CN.md). This capability is planned and is not included in `v0.2.x` yet.
+DeepSeek Harness and other automation clients can use the packaged `zima-displayctl`. See the [DeepSeekHarness integration guide](docs/deepseekharness-integration.zh-CN.md) and [OpenAPI document](docs/openapi.yaml).
 
 ## API
 
@@ -118,6 +128,12 @@ The proposed DeepSeekHarness workflow for generated PPTX, Markdown and PDF conte
 | `POST` | `/zima-display/api/action` | Change modes and control playback |
 | `GET` | `/zima-display/api/media` | Browse allowed media folders |
 | `POST` | `/zima-display/api/upload` | Upload a video or image |
+| `POST` | `/zima-display/api/v1/presentations` | Upload an image presentation archive (Bearer Token) |
+| `POST` | `/zima-display/api/v1/presentations/text` | Create a text presentation (Bearer Token) |
+| `POST` | `/zima-display/api/v1/presentations/{id}/activate` | Activate a presentation (Bearer Token) |
+| `POST` | `/zima-display/api/v1/presentation/next` | Show the next page (Bearer Token) |
+| `POST` | `/zima-display/api/v1/presentation/previous` | Show the previous page (Bearer Token) |
+| `POST` | `/zima-display/api/v1/presentation/stop` | Stop presenting (Bearer Token) |
 
 Media access is restricted to `/DATA`, `/media`, `/mnt` and the application data directory. The API does not accept arbitrary system commands.
 

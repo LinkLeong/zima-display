@@ -42,6 +42,9 @@ const context = vm.createContext({
   },
   fetch: async (url, options) => {
     requests.push({ url, options });
+    if (url.endsWith('/integration/dsh')) {
+      return { ok: true, json: async () => ({ available: false, installed: false }) };
+    }
     const config = JSON.parse(options.body);
     return { ok: true, json: async () => config };
   },
@@ -64,9 +67,9 @@ await vm.runInContext('state.localeSync', context);
 
 assert.equal(context.document.documentElement.lang, 'en-US');
 assert.equal(storage.get('zima-display.locale'), 'en-US');
-assert.equal(requests.length, 1);
-assert.equal(requests[0].url, '/zima-display/api/config');
-assert.equal(JSON.parse(requests[0].options.body).dashboard.language, 'en-US');
+const configRequests = requests.filter(request => request.url === '/zima-display/api/config');
+assert.equal(configRequests.length, 1);
+assert.equal(JSON.parse(configRequests[0].options.body).dashboard.language, 'en-US');
 assert.equal(vm.runInContext('state.status.config.dashboard.language', context), 'en-US');
 
 console.log('Verified that manual language selection synchronizes Web and HDMI configuration.');

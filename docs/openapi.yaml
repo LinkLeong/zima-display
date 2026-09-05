@@ -1,0 +1,99 @@
+openapi: 3.0.3
+info:
+  title: Zima Display Automation API
+  version: 0.3.0
+servers:
+  - url: http://zimaos-host/zima-display/api/v1
+security:
+  - bearerAuth: []
+paths:
+  /presentation/status:
+    get:
+      summary: Get display and presentation status
+      responses:
+        "200": {description: Current service status}
+  /presentations/text:
+    post:
+      summary: Create a text presentation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, pages]
+              properties:
+                title: {type: string}
+                source: {type: string}
+                pages:
+                  type: array
+                  maxItems: 500
+                  items: {type: string}
+      responses:
+        "201": {description: Presentation created}
+  /presentations:
+    post:
+      summary: Upload a ZIP containing presentation page images
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [archive]
+              properties:
+                archive: {type: string, format: binary}
+                title: {type: string}
+                source: {type: string}
+      responses:
+        "201": {description: Presentation created}
+  /presentations/{id}/activate:
+    post:
+      summary: Activate a presentation
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: {type: string}
+      responses:
+        "200": {description: Presentation activated}
+  /presentations/{id}:
+    delete:
+      summary: Delete a presentation
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: {type: string}
+      responses:
+        "200": {description: Presentation deleted}
+  /presentation/next:
+    post:
+      summary: Show the next page
+      responses:
+        "200": {description: Page changed}
+  /presentation/previous:
+    post:
+      summary: Show the previous page
+      responses:
+        "200": {description: Page changed}
+  /presentation/stop:
+    post:
+      summary: Stop presenting and return to the dashboard
+      responses:
+        "200": {description: Presentation stopped}
+  /action:
+    post:
+      summary: Run a display or media action
+      responses:
+        "200": {description: Action completed}
+  /upload:
+    post:
+      summary: Upload a media file
+      responses:
+        "201": {description: Media uploaded}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
