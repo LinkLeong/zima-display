@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Zima Display Automation API
-  version: 0.3.1
+  version: 0.4.0
 servers:
   - url: http://zimaos-host/zima-display/api/v1
 security:
@@ -85,6 +85,25 @@ paths:
   /action:
     post:
       summary: Run a display or media action
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action:
+                  type: string
+                  enum: [mode, play, pause, resume, stop, seek, volume, next, previous]
+                mode:
+                  type: string
+                  enum: [dashboard, canvas, clock, black, terminal]
+                path: {type: string}
+                paths:
+                  type: array
+                  items: {type: string}
+                value: {type: number}
       responses:
         "200": {description: Action completed}
   /upload:

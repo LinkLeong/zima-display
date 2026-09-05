@@ -122,3 +122,71 @@ func TestStatusDoesNotExposeAutomationToken(t *testing.T) {
 		t.Fatal("status response exposed the automation token")
 	}
 }
+
+func TestDashboardPreviewUsesDraftAppearance(t *testing.T) {
+	path := filepath.Join(t.TempDir(), config.ConfigName)
+	store, err := config.NewStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	controller := player.New(filepath.Join(t.TempDir(), "mpv.sock"), t.TempDir(), store.Get)
+	api := New(log.New(io.Discard, "", 0), store, controller, "test-version")
+	body := []byte(`{"dashboard":{"title":"Preview","language":"en-US","layout":"large","font_scale":1.5,"refresh_interval_ms":1000},"resolution":"1024x600"}`)
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, apiPrefix+"/preview/dashboard", bytes.NewReader(body))
+	api.Handler().ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("preview returned %d: %s", recorder.Code, recorder.Body.String())
+	}
+	var scene player.Scene
+	if err := json.Unmarshal(recorder.Body.Bytes(), &scene); err != nil {
+		t.Fatal(err)
+	}
+	if scene.Width != 1920 || scene.Height != 1080 || len(scene.Elements) == 0 {
+		t.Fatalf("unexpected preview scene: %#v", scene)
+	}
+	foundTitle := false
+	for _, element := range scene.Elements {
+		if element.ID == "title" && element.Text == "PREVIEW" {
+			foundTitle = true
+		}
+	}
+	if !foundTitle {
+		t.Fatal("preview scene did not use draft dashboard settings")
+	}
+}
+
+func TestCanvasPreviewUsesDraftLayout(t *testing.T) {
+	path := filepath.Join(t.TempDir(), config.ConfigName)
+	store, err := config.NewStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	controller := player.New(filepath.Join(t.TempDir(), "mpv.sock"), t.TempDir(), store.Get)
+	api := New(log.New(io.Discard, "", 0), store, controller, "test-version")
+	canvas := store.Get().Canvas
+	canvas.Widgets = []config.CanvasWidget{{ID: "message", Type: "text", Text: "Hello Canvas", X: 100, Y: 120, Width: 800, Height: 100, FontSize: 64, Color: "#ffffff", Bold: true}}
+	payload, err := json.Marshal(canvasPreviewRequest{Canvas: canvas})
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, apiPrefix+"/preview/canvas", bytes.NewReader(payload))
+	api.Handler().ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("canvas preview returned %d: %s", recorder.Code, recorder.Body.String())
+	}
+	var scene player.Scene
+	if err := json.Unmarshal(recorder.Body.Bytes(), &scene); err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, element := range scene.Elements {
+		if element.WidgetID == "message" && element.Text == "Hello Canvas" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("canvas preview did not render the draft widget")
+	}
+}

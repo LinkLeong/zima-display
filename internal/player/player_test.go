@@ -156,13 +156,41 @@ func TestDashboardUsesLargeTypeOnCompactDisplay(t *testing.T) {
 		IPAddresses: []string{"192.168.1.20"},
 	}
 	data := renderDashboard(snapshot, cfg, time.Date(2026, time.September, 4, 12, 30, 0, 0, time.UTC))
-	for _, expected := range []string{"\\fs180", "\\fs112", "\\fs32", "192.168.1.20"} {
+	for _, expected := range []string{"\\fs112", "\\fs30", "\\fs24", "192.168.1.20"} {
 		if !strings.Contains(data, expected) {
 			t.Fatalf("compact dashboard is missing %q", expected)
 		}
 	}
 	if strings.Contains(data, "打开 ZimaOS") {
 		t.Fatal("compact dashboard should reserve space for core metrics instead of the control hint")
+	}
+}
+
+func TestLargeDashboardUsesAlignedCardGrid(t *testing.T) {
+	cfg := config.Default()
+	cfg.Dashboard.Layout = "large"
+	scene := DashboardScene(metrics.Snapshot{}, cfg, time.Now())
+
+	elements := make(map[string]SceneElement, len(scene.Elements))
+	for _, element := range scene.Elements {
+		elements[element.ID] = element
+	}
+	for index, id := range []string{"cpu-card", "memory-card", "storage-card"} {
+		element := elements[id]
+		if element.X != 72+index*600 || element.Y != 170 || element.Width != 576 || element.Height != 380 {
+			t.Fatalf("%s bounds = %#v", id, element)
+		}
+	}
+	for index, id := range []string{"network-card", "thermal-card", "display-card"} {
+		element := elements[id]
+		if element.X != 72+index*600 || element.Y != 584 || element.Width != 576 || element.Height != 320 {
+			t.Fatalf("%s bounds = %#v", id, element)
+		}
+	}
+	cpuDetail := elements["cpu-uptime-value"]
+	cpuBar := elements["cpu-bar-track"]
+	if cpuDetail.Y+cpuDetail.Height > cpuBar.Y {
+		t.Fatalf("CPU detail overlaps usage bar: detail=%#v bar=%#v", cpuDetail, cpuBar)
 	}
 }
 
@@ -175,5 +203,46 @@ func TestDashboardKeepsStandardLayoutAt1080p(t *testing.T) {
 	}
 	if !strings.Contains(data, "打开 ZimaOS") {
 		t.Fatal("1080p dashboard is missing the standard control hint")
+	}
+}
+
+func TestDashboardFontScaleChangesSceneText(t *testing.T) {
+	cfg := config.Default()
+	cfg.Dashboard.Layout = "large"
+	cfg.Dashboard.FontScale = 2
+	scene := DashboardScene(metrics.Snapshot{}, cfg, time.Now())
+	for _, element := range scene.Elements {
+		if element.ID == "address" {
+			if element.FontSize != 64 {
+				t.Fatalf("address font size = %d, want 64", element.FontSize)
+			}
+			return
+		}
+	}
+	t.Fatal("address element was not rendered")
+}
+
+func TestCanvasSceneResolvesLiveWidgets(t *testing.T) {
+	cfg := config.Default()
+	snapshot := metrics.Snapshot{CPUPercent: 42, MemoryPercent: 63, TemperatureC: 55, Hostname: "zima", IPAddresses: []string{"192.168.1.8"}}
+	scene := CanvasScene(snapshot, cfg, time.Date(2026, time.September, 5, 9, 7, 0, 0, time.UTC))
+	data := RenderSceneASS(scene)
+	for _, expected := range []string{"09:07", "CPU 42%", "内存 63%", "温度 55°C", "192.168.1.8", "zima"} {
+		if !strings.Contains(data, expected) {
+			t.Fatalf("canvas output is missing %q", expected)
+		}
+	}
+	if len(scene.Elements) <= len(cfg.Canvas.Widgets) {
+		t.Fatal("gradient background elements were not generated")
+	}
+}
+
+func TestCanvasImageBackgroundLeavesOverlayTransparent(t *testing.T) {
+	cfg := config.Default()
+	cfg.Canvas.BackgroundType = "image"
+	cfg.Canvas.BackgroundImage = "/DATA/background.png"
+	scene := CanvasScene(metrics.Snapshot{}, cfg, time.Now())
+	if !scene.Transparent || scene.BackgroundImage != cfg.Canvas.BackgroundImage {
+		t.Fatalf("unexpected image background scene: %#v", scene)
 	}
 }

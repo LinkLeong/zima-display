@@ -15,8 +15,13 @@ function element() {
     value: '',
     textContent: '',
     innerHTML: '',
+    hidden: false,
+    clientWidth: 640,
+    clientHeight: 360,
+    firstElementChild: null,
     setAttribute() {},
-    replaceChildren() {},
+    appendChild(child) { this.firstElementChild ||= child; },
+    replaceChildren(...children) { this.firstElementChild = children[0] || null; },
     addEventListener() {}
   };
 }
@@ -45,12 +50,16 @@ const context = vm.createContext({
     if (url.endsWith('/integration/dsh')) {
       return { ok: true, json: async () => ({ available: false, installed: false }) };
     }
+    if (url.endsWith('/preview/dashboard')) {
+      return { ok: true, json: async () => ({ width: 1920, height: 1080, background: '151411', elements: [] }) };
+    }
     const config = JSON.parse(options.body);
     return { ok: true, json: async () => config };
   },
   setTimeout() { return 1; },
   clearTimeout() {},
   setInterval() { return 1; },
+  requestAnimationFrame(callback) { callback(); },
   FormData: class {}
 });
 

@@ -10,6 +10,9 @@ It is installed as a `zpkg` / `systemd-sysext` `.raw` package. Docker is not req
 
 - Native ZimaOS sidebar UI with Simplified Chinese and English support.
 - HDMI dashboard with CPU, memory, storage, network, temperature, GPU, IP, OS and connector status.
+- Dashboard font scaling from 80% to 200%, automatic/standard/large layouts, and a live HDMI-accurate preview.
+- Free Canvas mode with draggable and resizable widgets, per-widget typography, custom text and live preview.
+- System overview, giant clock and minimal canvas templates with solid, gradient and uploaded-image backgrounds.
 - One language selector synchronizes the browser UI and HDMI dashboard.
 - Dashboard, clock, black standby, media playback and terminal modes.
 - Local video and image browser, playback queue and uploads up to 20 GB.
@@ -50,9 +53,12 @@ http://<zimaos-host>/modules/zima-display/index.html
 ## Usage
 
 1. Connect the display before switching HDMI modes.
-2. Select **System dashboard**, **Ambient clock**, **Black standby**, or **Restore terminal** in the control panel.
-3. Open **Display settings** to configure the startup mode, DRM/Wayland backend, display language, media folders and audio device.
-4. Use the media panel to browse files, upload media, or play a network URL.
+2. Select **System dashboard**, **Free canvas**, **Ambient clock**, **Black standby**, or **Restore terminal**.
+3. Open **Display settings** to adjust dashboard font size and layout, then preview or save and apply it to HDMI.
+4. In **Free canvas**, apply a template or add widgets, drag to position, resize from the lower-right corner, or enter exact X/Y/W/H values.
+5. Customize each widget's font size, color and weight, and choose a solid, gradient or uploaded-image background.
+6. Configure the startup mode, DRM/Wayland backend, language, media folders and audio device in Display settings.
+7. Use the media panel to browse files, upload media, or play a network URL.
 
 The web UI follows the browser language on first use. A manual language selection synchronizes the web UI and HDMI dashboard, and is stored both in the browser and the device `config.json`.
 
@@ -128,6 +134,8 @@ DeepSeek Harness and other automation clients can use the packaged `zima-display
 | `GET` | `/zima-display/api/health` | Health and version |
 | `GET` | `/zima-display/api/status` | Player, system and display status |
 | `GET/PUT` | `/zima-display/api/config` | Read or update settings |
+| `POST` | `/zima-display/api/preview/dashboard` | Preview unsaved dashboard settings |
+| `POST` | `/zima-display/api/preview/canvas` | Preview an unsaved free-canvas layout |
 | `POST` | `/zima-display/api/action` | Change modes and control playback |
 | `GET` | `/zima-display/api/media` | Browse allowed media folders |
 | `POST` | `/zima-display/api/upload` | Upload a video or image |

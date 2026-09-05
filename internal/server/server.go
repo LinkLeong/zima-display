@@ -84,6 +84,15 @@ type dshInstallRequest struct {
 	BaseURL string `json:"base_url"`
 }
 
+type dashboardPreviewRequest struct {
+	Dashboard  config.Dashboard `json:"dashboard"`
+	Resolution string           `json:"resolution"`
+}
+
+type canvasPreviewRequest struct {
+	Canvas config.Canvas `json:"canvas"`
+}
+
 func New(logger *log.Logger, store *config.Store, controller *player.Manager, version string) *Server {
 	return &Server{
 		logger:        logger,
@@ -107,8 +116,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc(apiPrefix+"/health", s.health)
 	mux.HandleFunc(apiPrefix+"/status", s.status)
 	mux.HandleFunc(apiPrefix+"/config", s.configuration)
+	mux.HandleFunc(apiPrefix+"/preview/dashboard", s.dashboardPreview)
+	mux.HandleFunc(apiPrefix+"/preview/canvas", s.canvasPreview)
 	mux.HandleFunc(apiPrefix+"/action", s.action)
 	mux.HandleFunc(apiPrefix+"/media", s.media)
+	mux.HandleFunc(apiPrefix+"/media/content", s.mediaContent)
 	mux.HandleFunc(apiPrefix+"/upload", s.upload)
 	mux.HandleFunc(apiPrefix+"/integration/dsh", s.dshIntegration)
 	mux.HandleFunc(apiPrefix+"/integration/dsh/", s.dshIntegration)
@@ -359,6 +371,67 @@ func publicConfig(cfg config.Config) config.Config {
 	return cfg
 }
 
+func (s *Server) dashboardPreview(w http.ResponseWriter, r *http.Request) {
+	cfg := s.config.Get()
+	resolution := ""
+	switch r.Method {
+	case http.MethodGet:
+	case http.MethodPost:
+		var request dashboardPreviewRequest
+		if err := decodeJSON(w, r, &request); err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		cfg.Dashboard = request.Dashboard
+		resolution = strings.TrimSpace(request.Resolution)
+		if err := cfg.Validate(); err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+	default:
+		methodNotAllowed(w, http.MethodGet, http.MethodPost)
+		return
+	}
+	s.mu.RLock()
+	snapshot := s.metrics
+	s.mu.RUnlock()
+	if resolution != "" && resolution != "current" {
+		var width, height int
+		if parsed, _ := fmt.Sscanf(resolution, "%dx%d", &width, &height); parsed != 2 || width < 320 || height < 240 || width > 7680 || height > 4320 {
+			writeError(w, http.StatusBadRequest, errors.New("preview resolution must be current or WIDTHxHEIGHT"))
+			return
+		}
+		snapshot.Display.Connected = true
+		snapshot.Display.Modes = []string{fmt.Sprintf("%dx%d", width, height)}
+	}
+	writeJSON(w, http.StatusOK, player.DashboardScene(snapshot, cfg, time.Now()))
+}
+
+func (s *Server) canvasPreview(w http.ResponseWriter, r *http.Request) {
+	cfg := s.config.Get()
+	switch r.Method {
+	case http.MethodGet:
+	case http.MethodPost:
+		var request canvasPreviewRequest
+		if err := decodeJSON(w, r, &request); err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		cfg.Canvas = request.Canvas
+		if err := cfg.Validate(); err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+	default:
+		methodNotAllowed(w, http.MethodGet, http.MethodPost)
+		return
+	}
+	s.mu.RLock()
+	snapshot := s.metrics
+	s.mu.RUnlock()
+	writeJSON(w, http.StatusOK, player.CanvasScene(snapshot, cfg, time.Now()))
+}
+
 func (s *Server) action(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		methodNotAllowed(w, http.MethodPost)
@@ -482,6 +555,23 @@ func (s *Server) media(w http.ResponseWriter, r *http.Request) {
 		parent = ""
 	}
 	writeJSON(w, http.StatusOK, mediaResponse{Path: path, Parent: parent, Entries: result})
+}
+
+func (s *Server) mediaContent(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	path, err := resolveLocalPath(s.config.Get(), strings.TrimSpace(r.URL.Query().Get("path")), false)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if mediaKind(path, false) != "image" {
+		writeError(w, http.StatusBadRequest, errors.New("canvas background must be an image"))
+		return
+	}
+	http.ServeFile(w, r, path)
 }
 
 func (s *Server) upload(w http.ResponseWriter, r *http.Request) {

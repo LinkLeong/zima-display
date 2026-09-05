@@ -7,7 +7,7 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>Zima Display</title>
     <link rel="icon" type="image/svg+xml" href="appicon.svg">
-    <link rel="stylesheet" href="styles.css?v=0.3.1">
+    <link rel="stylesheet" href="styles.css?v=0.4.0">
   </head>
   <body>
     <div class="grain" aria-hidden="true"></div>
@@ -37,6 +37,7 @@
         <article class="screen-card reveal delay-1">
           <div class="card-kicker"><span data-i18n="preview.liveOutput">实时输出</span><span id="connectorName">自动检测</span></div>
           <div class="screen-preview" id="screenPreview">
+            <div id="liveScenePreview" class="scene-preview" hidden></div>
             <div class="preview-grid"></div>
             <div class="preview-status">
               <span id="previewMode">系统仪表盘</span>
@@ -76,14 +77,17 @@
           <button class="mode-button active" type="button" data-mode="dashboard">
             <span class="mode-index">01</span><span><b data-i18n="modes.dashboard">系统仪表盘</b><small data-i18n="modes.dashboardHint">性能、存储与网络</small></span><i></i>
           </button>
+          <button class="mode-button" type="button" data-mode="canvas">
+            <span class="mode-index">02</span><span><b data-i18n="modes.canvas">自由画布</b><small data-i18n="modes.canvasHint">自定义组件、位置与背景</small></span><i></i>
+          </button>
           <button class="mode-button" type="button" data-mode="clock">
-            <span class="mode-index">02</span><span><b data-i18n="modes.clock">环境时钟</b><small data-i18n="modes.clockHint">低干扰常亮信息</small></span><i></i>
+            <span class="mode-index">03</span><span><b data-i18n="modes.clock">环境时钟</b><small data-i18n="modes.clockHint">低干扰常亮信息</small></span><i></i>
           </button>
           <button class="mode-button" type="button" data-mode="black">
-            <span class="mode-index">03</span><span><b data-i18n="modes.black">黑屏待机</b><small data-i18n="modes.blackHint">播放器保持在线</small></span><i></i>
+            <span class="mode-index">04</span><span><b data-i18n="modes.black">黑屏待机</b><small data-i18n="modes.blackHint">播放器保持在线</small></span><i></i>
           </button>
           <button class="mode-button terminal" type="button" data-mode="terminal">
-            <span class="mode-index">04</span><span><b data-i18n="modes.terminal">恢复终端</b><small data-i18n="modes.terminalHint">释放 HDMI 与 TTY1</small></span><i></i>
+            <span class="mode-index">05</span><span><b data-i18n="modes.terminal">恢复终端</b><small data-i18n="modes.terminalHint">释放 HDMI 与 TTY1</small></span><i></i>
           </button>
           <div class="volume-block">
             <div><span data-i18n="player.volume">HDMI 音量</span><b id="volumeValue">70%</b></div>
@@ -108,6 +112,33 @@
         <article class="metric-card compact">
           <span data-i18n="metrics.thermal">温度 / GPU</span><div><b><em id="temperatureMetric">--</em>&deg;C</b></div><small id="gpuName">自动检测</small>
         </article>
+      </section>
+
+      <section class="canvas-panel reveal delay-4">
+        <div class="section-heading canvas-heading">
+          <div><span data-i18n="canvas.kicker">布局工作室</span><h2 data-i18n="canvas.heading">自由画布</h2><p data-i18n="canvas.description">拖动组件调整位置，拖动右下角改变大小。保存前不会改变 HDMI。</p></div>
+          <div class="section-actions"><button id="saveCanvasButton" class="button ghost" type="button" data-i18n="canvas.save">保存布局</button><button id="applyCanvasButton" class="button primary" type="button" data-i18n="canvas.apply">保存并投到 HDMI</button></div>
+        </div>
+        <div class="canvas-workspace">
+          <aside class="canvas-tools">
+            <label><span data-i18n="canvas.template">布局模板</span><select id="canvasTemplateInput"><option value="overview" data-i18n="canvas.templateOverview">系统概览</option><option value="clock" data-i18n="canvas.templateClock">巨型时钟</option><option value="minimal" data-i18n="canvas.templateMinimal">极简状态</option></select></label>
+            <button id="applyCanvasTemplateButton" class="button dark" type="button" data-i18n="canvas.useTemplate">应用模板</button>
+            <label><span data-i18n="canvas.backgroundType">背景类型</span><select id="canvasBackgroundTypeInput"><option value="solid" data-i18n="canvas.backgroundSolid">纯色</option><option value="gradient" data-i18n="canvas.backgroundGradient">渐变</option><option value="image" data-i18n="canvas.backgroundImage">图片</option></select></label>
+            <div class="color-pair"><label><span data-i18n="canvas.primaryColor">主色</span><input id="canvasBackgroundColorInput" type="color" value="#151411"></label><label><span data-i18n="canvas.secondaryColor">辅色</span><input id="canvasSecondaryColorInput" type="color" value="#30251d"></label></div>
+            <label><span data-i18n="canvas.backgroundPath">背景图片</span><input id="canvasBackgroundImageInput" type="text" placeholder="/DATA/..."></label>
+            <button id="uploadCanvasBackgroundButton" class="button ghost" type="button" data-i18n="canvas.uploadBackground">上传背景图片</button><input id="canvasBackgroundUploadInput" type="file" accept="image/*" hidden>
+            <div class="canvas-add"><select id="canvasWidgetTypeInput"><option value="clock" data-i18n="canvas.widget.clock">时钟</option><option value="date" data-i18n="canvas.widget.date">日期</option><option value="cpu" data-i18n="canvas.widget.cpu">CPU</option><option value="memory" data-i18n="canvas.widget.memory">内存</option><option value="storage" data-i18n="canvas.widget.storage">存储</option><option value="temperature" data-i18n="canvas.widget.temperature">温度</option><option value="network" data-i18n="canvas.widget.network">网络速率</option><option value="ip" data-i18n="canvas.widget.ip">IP 地址</option><option value="hostname" data-i18n="canvas.widget.hostname">主机名</option><option value="text" data-i18n="canvas.widget.text">自定义文字</option></select><button id="addCanvasWidgetButton" class="button dark" type="button" data-i18n="canvas.addWidget">添加组件</button></div>
+            <div id="canvasInspector" class="canvas-inspector disabled">
+              <b data-i18n="canvas.inspector">所选组件</b>
+              <label><span data-i18n="canvas.text">文字</span><input id="canvasWidgetTextInput" type="text"></label>
+              <div class="canvas-number-grid"><label>X<input id="canvasWidgetXInput" type="number" min="0" max="1840"></label><label>Y<input id="canvasWidgetYInput" type="number" min="0" max="1050"></label><label>W<input id="canvasWidgetWidthInput" type="number" min="80" max="1920"></label><label>H<input id="canvasWidgetHeightInput" type="number" min="30" max="1080"></label></div>
+              <label><span data-i18n="canvas.fontSize">字号</span><input id="canvasWidgetFontInput" type="range" min="12" max="300" step="2"><output id="canvasWidgetFontValue">--</output></label>
+              <div class="color-pair"><label><span data-i18n="canvas.textColor">文字颜色</span><input id="canvasWidgetColorInput" type="color"></label><label class="toggle-inline"><span data-i18n="canvas.bold">粗体</span><input id="canvasWidgetBoldInput" type="checkbox"></label></div>
+              <button id="removeCanvasWidgetButton" class="button danger" type="button" data-i18n="canvas.removeWidget">删除组件</button>
+            </div>
+          </aside>
+          <div class="canvas-stage-column"><div class="canvas-ruler"><span>1920 × 1080</span><span id="canvasDirtyState" data-i18n="canvas.savedState">已保存</span></div><div id="canvasScenePreview" class="scene-preview canvas-scene-preview"></div></div>
+        </div>
       </section>
 
       <section class="integration-panel reveal delay-4">
@@ -151,18 +182,24 @@
     <dialog id="settingsDialog" class="settings-dialog">
       <form id="settingsForm" method="dialog">
         <div class="dialog-heading"><div><span data-i18n="settings.kicker">设备策略</span><h2 data-i18n="settings.heading">显示设置</h2></div><button id="closeSettingsButton" class="icon-button" type="button" aria-label="关闭" data-i18n-aria-label="common.close">&times;</button></div>
-        <label><span data-i18n="settings.defaultMode">开机默认模式</span><select id="defaultModeInput"><option value="dashboard" data-i18n="modes.dashboard">系统仪表盘</option><option value="clock" data-i18n="modes.clock">环境时钟</option><option value="black" data-i18n="modes.black">黑屏待机</option><option value="terminal" data-i18n="modes.systemTerminal">系统终端</option></select></label>
+        <label><span data-i18n="settings.defaultMode">开机默认模式</span><select id="defaultModeInput"><option value="dashboard" data-i18n="modes.dashboard">系统仪表盘</option><option value="canvas" data-i18n="modes.canvas">自由画布</option><option value="clock" data-i18n="modes.clock">环境时钟</option><option value="black" data-i18n="modes.black">黑屏待机</option><option value="terminal" data-i18n="modes.systemTerminal">系统终端</option></select></label>
         <label><span data-i18n="settings.backend">显示后端</span><select id="backendInput"><option value="auto" data-i18n="settings.backendAuto">自动：Wayland / DRM 回退</option><option value="wayland" data-i18n="settings.backendWayland">仅 Wayland</option><option value="drm" data-i18n="settings.backendDrm">仅 DRM</option></select></label>
         <label><span data-i18n="settings.audioDevice">HDMI 音频设备</span><input id="audioDeviceInput" type="text" placeholder="auto"></label>
         <label><span data-i18n="settings.dashboardLanguage">显示语言</span><select id="dashboardLanguageInput"><option value="zh-CN">简体中文</option><option value="en-US">English</option></select></label>
         <label><span data-i18n="settings.dashboardTitle">仪表盘标题</span><input id="dashboardTitleInput" type="text" maxlength="64"></label>
+        <label><span data-i18n="settings.dashboardLayout">仪表盘布局</span><select id="dashboardLayoutInput"><option value="auto" data-i18n="settings.layoutAuto">自动适配</option><option value="standard" data-i18n="settings.layoutStandard">标准布局</option><option value="large" data-i18n="settings.layoutLarge">大字布局</option></select></label>
+        <label><span><span data-i18n="settings.fontScale">字体大小</span> <output id="fontScaleValue">100%</output></span><input id="fontScaleInput" type="range" min="80" max="200" step="5" value="100"><small data-i18n="settings.fontScaleHint">大字号会自动降低超大数字的缩放幅度，避免内容互相遮挡。</small></label>
+        <section class="dashboard-preview-panel">
+          <div class="preview-toolbar"><div><b data-i18n="settings.previewHeading">仪表盘预览</b><small data-i18n="settings.previewHint">使用与 HDMI 相同的场景数据和坐标。</small></div><select id="previewResolutionInput" aria-label="预览分辨率" data-i18n-aria-label="settings.previewResolution"><option value="current" data-i18n="settings.previewCurrent">当前显示器</option><option value="1024x600">1024 × 600</option><option value="1280x720">1280 × 720</option><option value="1920x1080">1920 × 1080</option><option value="3840x2160">3840 × 2160</option></select></div>
+          <div id="settingsScenePreview" class="scene-preview settings-scene-preview"></div>
+        </section>
         <label><span data-i18n="settings.mediaRoots">媒体目录</span><textarea id="mediaRootsInput" rows="4" spellcheck="false"></textarea><small data-i18n="settings.mediaRootsHint">每行一个目录，仅允许 /DATA、/media、/mnt 下的路径。</small></label>
         <label class="toggle-row"><input id="autoStartInput" type="checkbox"><span><b data-i18n="settings.autoStart">开机接管 HDMI</b><small data-i18n="settings.autoStartHint">关闭后开机保留系统终端</small></span></label>
-        <div class="dialog-actions"><button id="cancelSettingsButton" class="button ghost" type="button" data-i18n="common.cancel">取消</button><button class="button primary" type="submit" data-i18n="common.save">保存设置</button></div>
+        <div class="dialog-actions"><button id="resetDashboardButton" class="button ghost action-left" type="button" data-i18n="settings.resetDashboard">恢复仪表盘默认</button><button id="cancelSettingsButton" class="button ghost" type="button" data-i18n="common.cancel">取消</button><button class="button" type="submit" data-i18n="common.save">保存设置</button><button id="applyDashboardButton" class="button primary" type="submit" data-apply-dashboard="true" data-i18n="settings.applyDashboard">保存并应用到 HDMI</button></div>
       </form>
     </dialog>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <script src="app.js?v=0.3.1"></script>
+    <script src="app.js?v=0.4.0"></script>
   </body>
 </html>

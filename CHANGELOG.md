@@ -4,6 +4,26 @@ All notable changes to this project are documented in this file. The project fol
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-05
+
+### Added
+
+- Added a live dashboard preview using the same scene data and coordinates as the HDMI renderer.
+- Added adjustable dashboard font scaling from 80% to 200% and automatic, standard and large-type layouts.
+- Added a free-canvas HDMI mode with draggable and resizable system, clock and text widgets.
+- Added system overview, giant clock and minimal status canvas templates.
+- Added solid, gradient and uploaded-image canvas backgrounds.
+- Added `canvas` mode support to `zima-displayctl` and the DeepSeek Harness Skill.
+
+### Changed
+
+- Rebuilt dashboard rendering around a shared scene model so previews and HDMI output remain aligned.
+- Added text clipping and explicit component bounds to prevent dashboard content overlap.
+
+### Fixed
+
+- Aligned both large-dashboard rows to the same three-column grid and separated CPU details from its usage bar.
+
 ## [0.3.2] - 2026-09-05
 
 ### Added

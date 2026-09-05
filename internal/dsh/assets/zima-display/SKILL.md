@@ -19,6 +19,7 @@ scripts/zima-displayctl --config config.json next
 scripts/zima-displayctl --config config.json previous
 scripts/zima-displayctl --config config.json stop
 scripts/zima-displayctl --config config.json mode dashboard
+scripts/zima-displayctl --config config.json mode canvas
 scripts/zima-displayctl --config config.json mode clock
 scripts/zima-displayctl --config config.json mode black
 scripts/zima-displayctl --config config.json mode terminal

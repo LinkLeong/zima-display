@@ -11,13 +11,20 @@ import (
 )
 
 func renderMode(mode string, snapshot metrics.Snapshot, cfg config.Config, now time.Time) string {
+	if mode == "canvas" {
+		return RenderSceneASS(CanvasScene(snapshot, cfg, now))
+	}
 	if mode == "clock" {
-		return renderClock(now, dashboardLocale(cfg))
+		return renderClock(now, dashboardLocale(cfg), cfg.Dashboard.FontScale)
 	}
 	return renderDashboard(snapshot, cfg, now)
 }
 
 func renderDashboard(snapshot metrics.Snapshot, cfg config.Config, now time.Time) string {
+	return RenderSceneASS(DashboardScene(snapshot, cfg, now))
+}
+
+func DashboardScene(snapshot metrics.Snapshot, cfg config.Config, now time.Time) Scene {
 	locale := dashboardLocale(cfg)
 	labels := dashboardLabelsFor(locale)
 	title := strings.ToUpper(cfg.Dashboard.Title)
@@ -54,81 +61,83 @@ func renderDashboard(snapshot metrics.Snapshot, cfg config.Config, now time.Time
 	if osName == "" {
 		osName = "ZimaOS"
 	}
-	if compactDashboard(snapshot.Display) {
-		return renderCompactDashboard(snapshot, compactDashboardContent{
-			labels:        labels,
-			title:         title,
-			displayMode:   displayMode,
-			displayStatus: displayStatus,
-			displayColor:  displayColor,
-			gpuVendor:     gpuVendor,
-			gpuName:       gpuName,
-			address:       address,
-			hostname:      hostname,
-			osName:        osName,
-			locale:        locale,
-			now:           now,
-		})
+	content := compactDashboardContent{
+		labels:        labels,
+		title:         title,
+		displayMode:   displayMode,
+		displayStatus: displayStatus,
+		displayColor:  displayColor,
+		gpuVendor:     gpuVendor,
+		gpuName:       gpuName,
+		address:       address,
+		hostname:      hostname,
+		osName:        osName,
+		locale:        locale,
+		now:           now,
 	}
+	if largeDashboard(cfg, snapshot.Display) {
+		return renderLargeDashboardScene(snapshot, content, cfg.Dashboard.FontScale)
+	}
+	return renderStandardDashboardScene(snapshot, content, cfg.Dashboard.FontScale)
+}
 
-	parts := []string{
-		assRect(0, 0, 1920, 1080, "151411", "00"),
-		assRect(0, 0, 26, 1080, "1866F2", "00"),
-		assRect(80, 78, 1760, 2, "45423D", "00"),
-		assText(82, 32, 26, "8C8982", title, true),
-		assText(1500, 22, 54, "F7F3EA", now.Format("15:04"), true),
-		assText(1500, 78, 18, "8C8982", formatDashboardDate(now, locale), false),
-		assText(82, 148, 22, "8C8982", labels.systemLoad, true),
-		assText(76, 188, 174, "F7F3EA", fmt.Sprintf("%.0f", snapshot.CPUPercent), true),
-		assText(378, 294, 36, "1866F2", "%", true),
-		assText(84, 390, 22, "8C8982", "CPU", true),
-	}
-	parts = append(parts, assBar(84, 434, 520, snapshot.CPUPercent, "1866F2")...)
-	parts = append(parts,
-		assText(84, 500, 19, "8C8982", labels.uptime, true),
-		assText(84, 536, 38, "F7F3EA", humanDuration(snapshot.UptimeSeconds, locale), true),
-		assText(84, 610, 19, "8C8982", labels.loadAverage, true),
-		assText(84, 646, 38, "F7F3EA", fmt.Sprintf("%.2f", snapshot.Load1), true),
-		assRect(690, 150, 530, 310, "24231F", "00"),
-		assText(730, 184, 20, "8C8982", labels.memory, true),
-		assText(730, 236, 74, "F7F3EA", fmt.Sprintf("%.0f%%", snapshot.MemoryPercent), true),
-		assText(730, 330, 22, "B9B5AC", humanBytes(snapshot.MemoryUsedBytes)+" / "+humanBytes(snapshot.MemoryTotal), false),
-	)
-	parts = append(parts, assBar(730, 400, 450, snapshot.MemoryPercent, "63C6A5")...)
-	parts = append(parts,
-		assRect(1260, 150, 580, 310, "24231F", "00"),
-		assText(1300, 184, 20, "8C8982", labels.storage, true),
-		assText(1300, 236, 74, "F7F3EA", fmt.Sprintf("%.0f%%", snapshot.DiskPercent), true),
-		assText(1300, 330, 22, "B9B5AC", humanBytes(snapshot.DiskUsedBytes)+" / "+humanBytes(snapshot.DiskTotalBytes), false),
-	)
-	parts = append(parts, assBar(1300, 400, 500, snapshot.DiskPercent, "E6A74C")...)
-	parts = append(parts,
-		assRect(690, 500, 360, 260, "24231F", "00"),
-		assText(730, 534, 20, "8C8982", labels.network, true),
-		assText(730, 590, 18, "8C8982", labels.download, true),
-		assText(730, 622, 32, "F7F3EA", humanBytesFloat(snapshot.NetworkRXBps)+"/s", true),
-		assText(730, 680, 18, "8C8982", labels.upload, true),
-		assText(730, 712, 32, "F7F3EA", humanBytesFloat(snapshot.NetworkTXBps)+"/s", true),
-		assRect(1090, 500, 350, 260, "24231F", "00"),
-		assText(1130, 534, 20, "8C8982", labels.thermal, true),
-		assText(1130, 594, 78, "F7F3EA", fmt.Sprintf("%.0f", snapshot.TemperatureC), true),
-		assText(1260, 628, 30, "1866F2", "C", true),
-		assText(1130, 700, 18, "8C8982", gpuVendor, true),
-		assText(1130, 728, 17, "B9B5AC", gpuName, false),
-		assRect(1480, 500, 360, 260, "24231F", "00"),
-		assText(1520, 534, 20, "8C8982", labels.display, true),
-		assText(1520, 594, 42, displayColor, displayStatus, true),
-		assText(1520, 668, 18, "8C8982", snapshot.Display.Connector, true),
-		assText(1520, 706, 17, "B9B5AC", displayMode, false),
-		assRect(80, 850, 1760, 2, "45423D", "00"),
-		assText(82, 890, 22, "F7F3EA", hostname, true),
-		assText(82, 930, 18, "8C8982", osName, false),
-		assText(650, 890, 18, "8C8982", labels.address, true),
-		assText(650, 930, 22, "F7F3EA", address, false),
-		assText(1370, 890, 18, "8C8982", labels.control, true),
-		assText(1370, 930, 22, "1866F2", labels.openControl, true),
-	)
-	return strings.Join(parts, "\n")
+func renderStandardDashboardScene(snapshot metrics.Snapshot, content compactDashboardContent, fontScale float64) Scene {
+	b := newSceneBuilder("151411", fontScale)
+	b.rect("accent", 0, 0, 26, 1080, "1866F2")
+	b.rect("header-line", 80, 78, 1760, 2, "45423D")
+	b.text("title", 82, 32, 1120, 50, 26, "8C8982", content.title, true)
+	b.text("clock", 1500, 22, 340, 70, 54, "F7F3EA", content.now.Format("15:04"), true)
+	b.text("date", 1500, 78, 340, 36, 18, "8C8982", formatDashboardDate(content.now, content.locale), false)
+	b.text("cpu-label", 82, 148, 520, 42, 22, "8C8982", content.labels.systemLoad, true)
+	b.text("cpu-value", 76, 188, 380, 205, 174, "F7F3EA", fmt.Sprintf("%.0f", snapshot.CPUPercent), true)
+	b.text("cpu-unit", 378, 294, 120, 60, 36, "1866F2", "%", true)
+	b.text("cpu-name", 84, 390, 520, 40, 22, "8C8982", "CPU", true)
+	b.bar("cpu-bar", 84, 434, 520, snapshot.CPUPercent, "1866F2")
+	b.text("uptime-label", 84, 500, 520, 34, 19, "8C8982", content.labels.uptime, true)
+	b.text("uptime-value", 84, 536, 520, 58, 38, "F7F3EA", humanDuration(snapshot.UptimeSeconds, content.locale), true)
+	b.text("load-label", 84, 610, 520, 34, 19, "8C8982", content.labels.loadAverage, true)
+	b.text("load-value", 84, 646, 520, 58, 38, "F7F3EA", fmt.Sprintf("%.2f", snapshot.Load1), true)
+
+	b.rect("memory-card", 690, 150, 530, 310, "24231F")
+	b.text("memory-label", 730, 184, 450, 42, 20, "8C8982", content.labels.memory, true)
+	b.text("memory-value", 730, 236, 450, 88, 74, "F7F3EA", fmt.Sprintf("%.0f%%", snapshot.MemoryPercent), true)
+	b.text("memory-detail", 730, 330, 450, 44, 22, "B9B5AC", humanBytes(snapshot.MemoryUsedBytes)+" / "+humanBytes(snapshot.MemoryTotal), false)
+	b.bar("memory-bar", 730, 400, 450, snapshot.MemoryPercent, "63C6A5")
+
+	b.rect("storage-card", 1260, 150, 580, 310, "24231F")
+	b.text("storage-label", 1300, 184, 500, 42, 20, "8C8982", content.labels.storage, true)
+	b.text("storage-value", 1300, 236, 500, 88, 74, "F7F3EA", fmt.Sprintf("%.0f%%", snapshot.DiskPercent), true)
+	b.text("storage-detail", 1300, 330, 500, 44, 22, "B9B5AC", humanBytes(snapshot.DiskUsedBytes)+" / "+humanBytes(snapshot.DiskTotalBytes), false)
+	b.bar("storage-bar", 1300, 400, 500, snapshot.DiskPercent, "E6A74C")
+
+	b.rect("network-card", 690, 500, 360, 260, "24231F")
+	b.text("network-label", 730, 534, 280, 38, 20, "8C8982", content.labels.network, true)
+	b.text("download-label", 730, 590, 280, 30, 18, "8C8982", content.labels.download, true)
+	b.text("download-value", 730, 622, 280, 46, 32, "F7F3EA", humanBytesFloat(snapshot.NetworkRXBps)+"/s", true)
+	b.text("upload-label", 730, 680, 280, 30, 18, "8C8982", content.labels.upload, true)
+	b.text("upload-value", 730, 712, 280, 46, 32, "F7F3EA", humanBytesFloat(snapshot.NetworkTXBps)+"/s", true)
+
+	b.rect("thermal-card", 1090, 500, 350, 260, "24231F")
+	b.text("thermal-label", 1130, 534, 270, 38, 20, "8C8982", content.labels.thermal, true)
+	b.text("thermal-value", 1130, 594, 150, 94, 78, "F7F3EA", fmt.Sprintf("%.0f", snapshot.TemperatureC), true)
+	b.text("thermal-unit", 1260, 628, 90, 54, 30, "1866F2", "C", true)
+	b.text("gpu-vendor", 1130, 700, 270, 28, 18, "8C8982", content.gpuVendor, true)
+	b.text("gpu-name", 1130, 728, 270, 28, 17, "B9B5AC", content.gpuName, false)
+
+	b.rect("display-card", 1480, 500, 360, 260, "24231F")
+	b.text("display-label", 1520, 534, 280, 38, 20, "8C8982", content.labels.display, true)
+	b.text("display-status", 1520, 594, 280, 58, 42, content.displayColor, content.displayStatus, true)
+	b.text("display-connector", 1520, 668, 280, 30, 18, "8C8982", snapshot.Display.Connector, true)
+	b.text("display-mode", 1520, 706, 280, 30, 17, "B9B5AC", content.displayMode, false)
+
+	b.rect("footer-line", 80, 850, 1760, 2, "45423D")
+	b.text("hostname", 82, 890, 500, 38, 22, "F7F3EA", content.hostname, true)
+	b.text("os", 82, 930, 500, 34, 18, "8C8982", content.osName, false)
+	b.text("address-label", 650, 890, 650, 34, 18, "8C8982", content.labels.address, true)
+	b.text("address", 650, 930, 650, 40, 22, "F7F3EA", content.address, false)
+	b.text("control-label", 1370, 890, 470, 34, 18, "8C8982", content.labels.control, true)
+	b.text("control", 1370, 930, 470, 40, 22, "1866F2", content.labels.openControl, true)
+	return b.scene
 }
 
 type compactDashboardContent struct {
@@ -139,64 +148,77 @@ type compactDashboardContent struct {
 	now                               time.Time
 }
 
-func renderCompactDashboard(snapshot metrics.Snapshot, content compactDashboardContent) string {
-	parts := []string{
-		assRect(0, 0, 1920, 1080, "151411", "00"),
-		assRect(0, 0, 32, 1080, "1866F2", "00"),
-		assRect(72, 128, 1776, 3, "45423D", "00"),
-		assText(74, 34, 36, "8C8982", content.title, true),
-		assText(1540, 18, 74, "F7F3EA", content.now.Format("15:04"), true),
-		assText(1540, 94, 26, "8C8982", formatDashboardDate(content.now, content.locale), false),
+func renderLargeDashboardScene(snapshot metrics.Snapshot, content compactDashboardContent, fontScale float64) Scene {
+	b := newSceneBuilder("151411", fontScale)
+	b.rect("accent", 0, 0, 32, 1080, "1866F2")
+	b.rect("header-line", 72, 128, 1776, 3, "45423D")
+	b.text("title", 74, 34, 1180, 62, 36, "8C8982", content.title, true)
+	b.text("clock", 1540, 18, 308, 82, 74, "F7F3EA", content.now.Format("15:04"), true)
+	b.text("date", 1540, 94, 308, 38, 26, "8C8982", formatDashboardDate(content.now, content.locale), false)
 
-		assRect(72, 170, 560, 390, "24231F", "00"),
-		assText(112, 206, 32, "8C8982", content.labels.systemLoad, true),
-		assText(104, 250, 180, "F7F3EA", fmt.Sprintf("%.0f", snapshot.CPUPercent), true),
-		assText(450, 386, 52, "1866F2", "%", true),
-		assText(112, 452, 30, "8C8982", "CPU", true),
-		assText(112, 512, 28, "B9B5AC", content.labels.uptime+" "+humanDuration(snapshot.UptimeSeconds, content.locale)+"  ·  "+content.labels.loadAverage+" "+fmt.Sprintf("%.2f", snapshot.Load1), false),
+	// Both rows share the same three-column grid so the compact layout reads as one composition.
+	const cardWidth = 576
+	cardX := [...]int{72, 672, 1272}
+	contentX := [...]int{112, 712, 1312}
 
-		assRect(668, 170, 560, 390, "24231F", "00"),
-		assText(708, 206, 32, "8C8982", content.labels.memory, true),
-		assText(708, 272, 112, "F7F3EA", fmt.Sprintf("%.0f%%", snapshot.MemoryPercent), true),
-		assText(708, 420, 30, "B9B5AC", humanBytes(snapshot.MemoryUsedBytes)+" / "+humanBytes(snapshot.MemoryTotal), false),
+	b.rect("cpu-card", cardX[0], 170, cardWidth, 380, "24231F")
+	b.text("cpu-label", contentX[0], 206, 496, 46, 30, "8C8982", content.labels.systemLoad, true)
+	b.text("cpu-value", contentX[0], 270, 496, 132, 112, "F7F3EA", fmt.Sprintf("%.0f%%", snapshot.CPUPercent), true)
+	b.text("cpu-uptime-label", contentX[0], 414, 220, 26, 18, "8C8982", content.labels.uptime, true)
+	b.text("cpu-uptime-value", contentX[0], 446, 220, 36, 24, "B9B5AC", humanDuration(snapshot.UptimeSeconds, content.locale), true)
+	b.text("cpu-load-label", contentX[0]+258, 414, 220, 26, 18, "8C8982", content.labels.loadAverage, true)
+	b.text("cpu-load-value", contentX[0]+258, 446, 220, 36, 24, "B9B5AC", fmt.Sprintf("%.2f", snapshot.Load1), true)
+	b.bar("cpu-bar", contentX[0], 510, 496, snapshot.CPUPercent, "1866F2")
 
-		assRect(1264, 170, 584, 390, "24231F", "00"),
-		assText(1304, 206, 32, "8C8982", content.labels.storage, true),
-		assText(1304, 272, 112, "F7F3EA", fmt.Sprintf("%.0f%%", snapshot.DiskPercent), true),
-		assText(1304, 420, 30, "B9B5AC", humanBytes(snapshot.DiskUsedBytes)+" / "+humanBytes(snapshot.DiskTotalBytes), false),
-	}
-	parts = append(parts, assBar(112, 476, 480, snapshot.CPUPercent, "1866F2")...)
-	parts = append(parts, assBar(708, 492, 480, snapshot.MemoryPercent, "63C6A5")...)
-	parts = append(parts, assBar(1304, 492, 504, snapshot.DiskPercent, "E6A74C")...)
-	parts = append(parts,
-		assRect(72, 600, 690, 300, "24231F", "00"),
-		assText(112, 636, 30, "8C8982", content.labels.network, true),
-		assText(112, 700, 26, "8C8982", content.labels.download, true),
-		assText(112, 746, 46, "F7F3EA", humanBytesFloat(snapshot.NetworkRXBps)+"/s", true),
-		assText(430, 700, 26, "8C8982", content.labels.upload, true),
-		assText(430, 746, 46, "F7F3EA", humanBytesFloat(snapshot.NetworkTXBps)+"/s", true),
+	b.rect("memory-card", cardX[1], 170, cardWidth, 380, "24231F")
+	b.text("memory-label", contentX[1], 206, 496, 46, 30, "8C8982", content.labels.memory, true)
+	b.text("memory-value", contentX[1], 270, 496, 132, 112, "F7F3EA", fmt.Sprintf("%.0f%%", snapshot.MemoryPercent), true)
+	b.text("memory-detail", contentX[1], 420, 496, 40, 24, "B9B5AC", humanBytes(snapshot.MemoryUsedBytes)+" / "+humanBytes(snapshot.MemoryTotal), false)
+	b.bar("memory-bar", contentX[1], 500, 496, snapshot.MemoryPercent, "63C6A5")
 
-		assRect(798, 600, 480, 300, "24231F", "00"),
-		assText(838, 636, 30, "8C8982", content.labels.thermal, true),
-		assText(838, 690, 115, "F7F3EA", fmt.Sprintf("%.0f", snapshot.TemperatureC), true),
-		assText(1035, 770, 42, "1866F2", "C", true),
-		assText(838, 838, 25, "B9B5AC", content.gpuVendor+" · "+content.gpuName, false),
+	b.rect("storage-card", cardX[2], 170, cardWidth, 380, "24231F")
+	b.text("storage-label", contentX[2], 206, 496, 46, 30, "8C8982", content.labels.storage, true)
+	b.text("storage-value", contentX[2], 270, 496, 132, 112, "F7F3EA", fmt.Sprintf("%.0f%%", snapshot.DiskPercent), true)
+	b.text("storage-detail", contentX[2], 420, 496, 40, 24, "B9B5AC", humanBytes(snapshot.DiskUsedBytes)+" / "+humanBytes(snapshot.DiskTotalBytes), false)
+	b.bar("storage-bar", contentX[2], 500, 496, snapshot.DiskPercent, "E6A74C")
 
-		assRect(1314, 600, 534, 300, "24231F", "00"),
-		assText(1354, 636, 30, "8C8982", content.labels.display, true),
-		assText(1354, 704, 58, content.displayColor, content.displayStatus, true),
-		assText(1354, 806, 28, "B9B5AC", content.displayMode+" · "+snapshot.Display.Connector, false),
+	b.rect("network-card", cardX[0], 584, cardWidth, 320, "24231F")
+	b.text("network-label", contentX[0], 620, 496, 44, 30, "8C8982", content.labels.network, true)
+	b.text("download-label", contentX[0], 690, 220, 38, 24, "8C8982", content.labels.download, true)
+	b.text("download-value", contentX[0], 736, 220, 62, 44, "F7F3EA", humanBytesFloat(snapshot.NetworkRXBps)+"/s", true)
+	b.text("upload-label", contentX[0]+258, 690, 220, 38, 24, "8C8982", content.labels.upload, true)
+	b.text("upload-value", contentX[0]+258, 736, 220, 62, 44, "F7F3EA", humanBytesFloat(snapshot.NetworkTXBps)+"/s", true)
 
-		assRect(72, 950, 1776, 3, "45423D", "00"),
-		assText(74, 976, 30, "F7F3EA", content.hostname, true),
-		assText(74, 1020, 22, "8C8982", content.osName, false),
-		assText(730, 976, 24, "8C8982", content.labels.address, true),
-		assText(730, 1016, 32, "F7F3EA", content.address, true),
-	)
-	return strings.Join(parts, "\n")
+	b.rect("thermal-card", cardX[1], 584, cardWidth, 320, "24231F")
+	b.text("thermal-label", contentX[1], 620, 496, 44, 30, "8C8982", content.labels.thermal, true)
+	b.text("thermal-value", contentX[1], 684, 200, 138, 112, "F7F3EA", fmt.Sprintf("%.0f", snapshot.TemperatureC), true)
+	b.text("thermal-unit", contentX[1]+220, 760, 90, 56, 40, "1866F2", "C", true)
+	b.text("gpu", contentX[1], 838, 496, 38, 24, "B9B5AC", content.gpuVendor+" · "+content.gpuName, false)
+
+	b.rect("display-card", cardX[2], 584, cardWidth, 320, "24231F")
+	b.text("display-label", contentX[2], 620, 496, 44, 30, "8C8982", content.labels.display, true)
+	b.text("display-status", contentX[2], 692, 496, 76, 58, content.displayColor, content.displayStatus, true)
+	b.text("display-connector", contentX[2], 792, 496, 38, 26, "B9B5AC", snapshot.Display.Connector, true)
+	b.text("display-mode", contentX[2], 838, 496, 38, 24, "B9B5AC", content.displayMode, false)
+
+	b.rect("footer-line", 72, 950, 1776, 3, "45423D")
+	b.text("hostname", 74, 976, 570, 42, 30, "F7F3EA", content.hostname, true)
+	b.text("os", 74, 1020, 570, 34, 22, "8C8982", content.osName, false)
+	b.text("address-label", 730, 976, 1118, 36, 24, "8C8982", content.labels.address, true)
+	b.text("address", 730, 1016, 1118, 46, 32, "F7F3EA", content.address, true)
+	return b.scene
 }
 
-func compactDashboard(display metrics.Display) bool {
+func largeDashboard(cfg config.Config, display metrics.Display) bool {
+	switch cfg.Dashboard.Layout {
+	case "large":
+		return true
+	case "standard":
+		return false
+	}
+	if cfg.Dashboard.FontScale >= 1.25 {
+		return true
+	}
 	if len(display.Modes) == 0 {
 		return false
 	}
@@ -207,12 +229,12 @@ func compactDashboard(display metrics.Display) bool {
 	return width <= 1280 || height <= 720
 }
 
-func renderClock(now time.Time, locale string) string {
+func renderClock(now time.Time, locale string, fontScale float64) string {
 	return strings.Join([]string{
 		assRect(0, 0, 1920, 1080, "151411", "00"),
 		assRect(0, 0, 26, 1080, "1866F2", "00"),
-		assText(130, 280, 250, "F7F3EA", now.Format("15:04"), true),
-		assText(145, 610, 44, "8C8982", formatClockDate(now, locale), false),
+		assText(130, 280, scaledDashboardFont(250, fontScale), "F7F3EA", now.Format("15:04"), true),
+		assText(145, 610, scaledDashboardFont(44, fontScale), "8C8982", formatClockDate(now, locale), false),
 		assRect(145, 704, 780, 10, "1866F2", "00"),
 	}, "\n")
 }

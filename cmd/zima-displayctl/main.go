@@ -91,7 +91,7 @@ func main() {
 		err = api.emptyPost("/presentation/" + args[0])
 	case "mode":
 		if len(args) != 2 {
-			err = errors.New("usage: zima-displayctl mode <dashboard|clock|black|terminal>")
+			err = errors.New("usage: zima-displayctl mode <dashboard|canvas|clock|black|terminal>")
 		} else {
 			err = api.action(map[string]any{"action": "mode", "mode": args[1]})
 		}

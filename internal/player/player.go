@@ -93,7 +93,7 @@ func New(socketPath, runtimePath string, provider func() config.Config) *Manager
 }
 
 func (m *Manager) SetMode(ctx context.Context, mode string) error {
-	if mode != "dashboard" && mode != "clock" && mode != "black" && mode != "terminal" {
+	if mode != "dashboard" && mode != "canvas" && mode != "clock" && mode != "black" && mode != "terminal" {
 		return fmt.Errorf("unsupported display mode %q", mode)
 	}
 	m.mu.Lock()
@@ -116,7 +116,7 @@ func (m *Manager) SetMode(ctx context.Context, mode string) error {
 	if err := m.ensureRendererLocked(ctx); err != nil {
 		return m.fail(err)
 	}
-	if mode == "dashboard" || mode == "clock" || mode == "black" {
+	if mode == "dashboard" || mode == "canvas" || mode == "clock" || mode == "black" {
 		if err := m.showGeneratedModeLocked(ctx, mode); err != nil {
 			return m.fail(err)
 		}
@@ -218,7 +218,12 @@ func (m *Manager) Stop(ctx context.Context) error {
 }
 
 func (m *Manager) showGeneratedModeLocked(ctx context.Context, mode string) error {
-	if err := m.send(ctx, []any{"loadfile", dashboardVideoSource, "replace"}, nil); err != nil {
+	source := dashboardVideoSource
+	cfg := m.config()
+	if mode == "canvas" && cfg.Canvas.BackgroundType == "image" && cfg.Canvas.BackgroundImage != "" {
+		source = cfg.Canvas.BackgroundImage
+	}
+	if err := m.send(ctx, []any{"loadfile", source, "replace"}, nil); err != nil {
 		return err
 	}
 	if err := m.send(ctx, []any{"set_property", "pause", false}, nil); err != nil {
@@ -228,14 +233,14 @@ func (m *Manager) showGeneratedModeLocked(ctx context.Context, mode string) erro
 		m.closeOverlayLocked()
 		return nil
 	}
-	return m.setOverlayLocked(ctx, renderMode(mode, m.snapshot, m.config(), time.Now()))
+	return m.setOverlayLocked(ctx, renderMode(mode, m.snapshot, cfg, time.Now()))
 }
 
 func (m *Manager) UpdateMetrics(ctx context.Context, snapshot metrics.Snapshot) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.snapshot = snapshot
-	if m.mode != "dashboard" && m.mode != "clock" {
+	if m.mode != "dashboard" && m.mode != "canvas" && m.mode != "clock" {
 		return
 	}
 	if err := m.setOverlayLocked(ctx, renderMode(m.mode, snapshot, m.config(), time.Now())); err != nil {
