@@ -231,7 +231,11 @@ func readNetwork() networkCounters {
 }
 
 func skipInterface(name string) bool {
-	for _, prefix := range []string{"lo", "docker", "veth", "br-", "virbr", "nbd", "tailscale", "zt"} {
+	for _, prefix := range []string{
+		"lo", "docker", "veth", "br", "virbr", "vmnet", "vnet", "nbd",
+		"tailscale", "zt", "tun", "tap", "wg", "cni", "flannel", "lxc",
+		"kube", "podman", "dummy", "ifb", "macvlan", "ipvlan", "bond",
+	} {
 		if strings.HasPrefix(name, prefix) {
 			return true
 		}
@@ -358,17 +362,106 @@ func readKernel() string {
 }
 
 func ipAddresses() []string {
-	addresses, _ := net.InterfaceAddrs()
-	var result []string
-	for _, address := range addresses {
-		ip, _, err := net.ParseCIDR(address.String())
-		if err != nil || ip.IsLoopback() || ip.IsLinkLocalUnicast() {
+	interfaces, _ := net.Interfaces()
+	var candidates []interfaceAddress
+	seen := make(map[string]struct{})
+	for _, networkInterface := range interfaces {
+		if networkInterface.Flags&net.FlagUp == 0 || networkInterface.Flags&net.FlagLoopback != 0 {
 			continue
 		}
-		result = append(result, ip.String())
+		priority, ok := displayInterfacePriority(networkInterface.Name, "/sys/class/net")
+		if !ok {
+			continue
+		}
+		addresses, err := networkInterface.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, address := range addresses {
+			ip, _, err := net.ParseCIDR(address.String())
+			if err != nil || !ip.IsGlobalUnicast() || ip.IsLinkLocalUnicast() {
+				continue
+			}
+			value := ip.String()
+			if _, exists := seen[value]; exists {
+				continue
+			}
+			seen[value] = struct{}{}
+			family := 1
+			if ip.To4() != nil {
+				family = 0
+			}
+			candidates = append(candidates, interfaceAddress{
+				value: value, family: family, priority: priority, name: networkInterface.Name,
+			})
+		}
 	}
-	sort.Strings(result)
+	sort.Slice(candidates, func(i, j int) bool {
+		if candidates[i].family != candidates[j].family {
+			return candidates[i].family < candidates[j].family
+		}
+		if candidates[i].priority != candidates[j].priority {
+			return candidates[i].priority < candidates[j].priority
+		}
+		if candidates[i].name != candidates[j].name {
+			return candidates[i].name < candidates[j].name
+		}
+		return candidates[i].value < candidates[j].value
+	})
+	result := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		result = append(result, candidate.value)
+	}
 	return result
+}
+
+type interfaceAddress struct {
+	value            string
+	family, priority int
+	name             string
+}
+
+func displayInterfacePriority(name, sysfsRoot string) (int, bool) {
+	lowerName := strings.ToLower(name)
+	if skipInterface(lowerName) {
+		return 0, false
+	}
+	base := filepath.Join(sysfsRoot, name)
+	if isThunderboltInterface(lowerName, base) {
+		return 1, true
+	}
+	if pathExists(filepath.Join(base, "wireless")) || strings.HasPrefix(lowerName, "wl") {
+		return 2, true
+	}
+	if pathExists(filepath.Join(base, "device")) {
+		return 0, true
+	}
+	if _, err := os.Stat(sysfsRoot); os.IsNotExist(err) && commonPhysicalInterfaceName(lowerName) {
+		return 0, true
+	}
+	return 0, false
+}
+
+func isThunderboltInterface(name, sysfsBase string) bool {
+	if strings.Contains(name, "thunderbolt") || strings.HasPrefix(name, "tb") {
+		return true
+	}
+	devicePath, err := filepath.EvalSymlinks(filepath.Join(sysfsBase, "device"))
+	return err == nil && strings.Contains(strings.ToLower(devicePath), "thunderbolt")
+}
+
+func commonPhysicalInterfaceName(name string) bool {
+	for _, prefix := range []string{"eth", "en", "wl", "wlan", "thunderbolt", "tb"} {
+		if strings.HasPrefix(name, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func pathExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 func readKeyValueFile(path string) map[string]uint64 {

@@ -54,6 +54,22 @@ func renderDashboard(snapshot metrics.Snapshot, cfg config.Config, now time.Time
 	if osName == "" {
 		osName = "ZimaOS"
 	}
+	if compactDashboard(snapshot.Display) {
+		return renderCompactDashboard(snapshot, compactDashboardContent{
+			labels:        labels,
+			title:         title,
+			displayMode:   displayMode,
+			displayStatus: displayStatus,
+			displayColor:  displayColor,
+			gpuVendor:     gpuVendor,
+			gpuName:       gpuName,
+			address:       address,
+			hostname:      hostname,
+			osName:        osName,
+			locale:        locale,
+			now:           now,
+		})
+	}
 
 	parts := []string{
 		assRect(0, 0, 1920, 1080, "151411", "00"),
@@ -113,6 +129,82 @@ func renderDashboard(snapshot metrics.Snapshot, cfg config.Config, now time.Time
 		assText(1370, 930, 22, "1866F2", labels.openControl, true),
 	)
 	return strings.Join(parts, "\n")
+}
+
+type compactDashboardContent struct {
+	labels                            dashboardLabels
+	title, displayMode, displayStatus string
+	displayColor, gpuVendor, gpuName  string
+	address, hostname, osName, locale string
+	now                               time.Time
+}
+
+func renderCompactDashboard(snapshot metrics.Snapshot, content compactDashboardContent) string {
+	parts := []string{
+		assRect(0, 0, 1920, 1080, "151411", "00"),
+		assRect(0, 0, 32, 1080, "1866F2", "00"),
+		assRect(72, 128, 1776, 3, "45423D", "00"),
+		assText(74, 34, 36, "8C8982", content.title, true),
+		assText(1540, 18, 74, "F7F3EA", content.now.Format("15:04"), true),
+		assText(1540, 94, 26, "8C8982", formatDashboardDate(content.now, content.locale), false),
+
+		assRect(72, 170, 560, 390, "24231F", "00"),
+		assText(112, 206, 32, "8C8982", content.labels.systemLoad, true),
+		assText(104, 250, 180, "F7F3EA", fmt.Sprintf("%.0f", snapshot.CPUPercent), true),
+		assText(450, 386, 52, "1866F2", "%", true),
+		assText(112, 452, 30, "8C8982", "CPU", true),
+		assText(112, 512, 28, "B9B5AC", content.labels.uptime+" "+humanDuration(snapshot.UptimeSeconds, content.locale)+"  ·  "+content.labels.loadAverage+" "+fmt.Sprintf("%.2f", snapshot.Load1), false),
+
+		assRect(668, 170, 560, 390, "24231F", "00"),
+		assText(708, 206, 32, "8C8982", content.labels.memory, true),
+		assText(708, 272, 112, "F7F3EA", fmt.Sprintf("%.0f%%", snapshot.MemoryPercent), true),
+		assText(708, 420, 30, "B9B5AC", humanBytes(snapshot.MemoryUsedBytes)+" / "+humanBytes(snapshot.MemoryTotal), false),
+
+		assRect(1264, 170, 584, 390, "24231F", "00"),
+		assText(1304, 206, 32, "8C8982", content.labels.storage, true),
+		assText(1304, 272, 112, "F7F3EA", fmt.Sprintf("%.0f%%", snapshot.DiskPercent), true),
+		assText(1304, 420, 30, "B9B5AC", humanBytes(snapshot.DiskUsedBytes)+" / "+humanBytes(snapshot.DiskTotalBytes), false),
+	}
+	parts = append(parts, assBar(112, 476, 480, snapshot.CPUPercent, "1866F2")...)
+	parts = append(parts, assBar(708, 492, 480, snapshot.MemoryPercent, "63C6A5")...)
+	parts = append(parts, assBar(1304, 492, 504, snapshot.DiskPercent, "E6A74C")...)
+	parts = append(parts,
+		assRect(72, 600, 690, 300, "24231F", "00"),
+		assText(112, 636, 30, "8C8982", content.labels.network, true),
+		assText(112, 700, 26, "8C8982", content.labels.download, true),
+		assText(112, 746, 46, "F7F3EA", humanBytesFloat(snapshot.NetworkRXBps)+"/s", true),
+		assText(430, 700, 26, "8C8982", content.labels.upload, true),
+		assText(430, 746, 46, "F7F3EA", humanBytesFloat(snapshot.NetworkTXBps)+"/s", true),
+
+		assRect(798, 600, 480, 300, "24231F", "00"),
+		assText(838, 636, 30, "8C8982", content.labels.thermal, true),
+		assText(838, 690, 115, "F7F3EA", fmt.Sprintf("%.0f", snapshot.TemperatureC), true),
+		assText(1035, 770, 42, "1866F2", "C", true),
+		assText(838, 838, 25, "B9B5AC", content.gpuVendor+" · "+content.gpuName, false),
+
+		assRect(1314, 600, 534, 300, "24231F", "00"),
+		assText(1354, 636, 30, "8C8982", content.labels.display, true),
+		assText(1354, 704, 58, content.displayColor, content.displayStatus, true),
+		assText(1354, 806, 28, "B9B5AC", content.displayMode+" · "+snapshot.Display.Connector, false),
+
+		assRect(72, 950, 1776, 3, "45423D", "00"),
+		assText(74, 976, 30, "F7F3EA", content.hostname, true),
+		assText(74, 1020, 22, "8C8982", content.osName, false),
+		assText(730, 976, 24, "8C8982", content.labels.address, true),
+		assText(730, 1016, 32, "F7F3EA", content.address, true),
+	)
+	return strings.Join(parts, "\n")
+}
+
+func compactDashboard(display metrics.Display) bool {
+	if len(display.Modes) == 0 {
+		return false
+	}
+	var width, height int
+	if _, err := fmt.Sscanf(display.Modes[0], "%dx%d", &width, &height); err != nil {
+		return false
+	}
+	return width <= 1280 || height <= 720
 }
 
 func renderClock(now time.Time, locale string) string {

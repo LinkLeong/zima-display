@@ -4,6 +4,17 @@ All notable changes to this project are documented in this file. The project fol
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-09-05
+
+### Added
+
+- Added an automatic large-type dashboard layout for 1024x600 and other displays at or below 1280x720.
+
+### Fixed
+
+- Limited displayed IP addresses to active physical Ethernet, Thunderbolt networking and Wi-Fi interfaces.
+- Prioritized IPv4 and excluded Docker, bridge, VPN and other virtual network interfaces from the dashboard address.
+
 ## [0.3.1] - 2026-09-05
 
 ### Fixed

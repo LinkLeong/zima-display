@@ -148,3 +148,32 @@ func TestDashboardSupportsSimplifiedChinese(t *testing.T) {
 		}
 	}
 }
+
+func TestDashboardUsesLargeTypeOnCompactDisplay(t *testing.T) {
+	cfg := config.Default()
+	snapshot := metrics.Snapshot{
+		Display:     metrics.Display{Connected: true, Connector: "card0-HDMI-A-1", Modes: []string{"1024x600"}},
+		IPAddresses: []string{"192.168.1.20"},
+	}
+	data := renderDashboard(snapshot, cfg, time.Date(2026, time.September, 4, 12, 30, 0, 0, time.UTC))
+	for _, expected := range []string{"\\fs180", "\\fs112", "\\fs32", "192.168.1.20"} {
+		if !strings.Contains(data, expected) {
+			t.Fatalf("compact dashboard is missing %q", expected)
+		}
+	}
+	if strings.Contains(data, "打开 ZimaOS") {
+		t.Fatal("compact dashboard should reserve space for core metrics instead of the control hint")
+	}
+}
+
+func TestDashboardKeepsStandardLayoutAt1080p(t *testing.T) {
+	cfg := config.Default()
+	snapshot := metrics.Snapshot{Display: metrics.Display{Modes: []string{"1920x1080"}}}
+	data := renderDashboard(snapshot, cfg, time.Now())
+	if strings.Contains(data, "\\fs180") {
+		t.Fatal("1080p dashboard unexpectedly used the compact layout")
+	}
+	if !strings.Contains(data, "打开 ZimaOS") {
+		t.Fatal("1080p dashboard is missing the standard control hint")
+	}
+}
