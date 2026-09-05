@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file. The project fol
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-05
+
+### Fixed
+
+- Synchronized manual language selection across the browser UI and HDMI dashboard.
+- Updated settings and documentation to make the unified language behavior explicit.
+
 ## [0.2.0] - 2026-09-04
 
 ### Added

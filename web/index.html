@@ -7,7 +7,7 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>Zima Display</title>
     <link rel="icon" type="image/svg+xml" href="appicon.svg">
-    <link rel="stylesheet" href="styles.css?v=0.2.0">
+    <link rel="stylesheet" href="styles.css?v=0.2.1">
   </head>
   <body>
     <div class="grain" aria-hidden="true"></div>
@@ -19,7 +19,7 @@
       <div class="topbar-status">
         <label class="language-picker">
           <span data-i18n="language.label">语言</span>
-          <select id="languageSelect" aria-label="界面语言" data-i18n-aria-label="language.aria">
+          <select id="languageSelect" aria-label="显示语言" data-i18n-aria-label="language.aria">
             <option value="zh-CN">简体中文</option>
             <option value="en-US">English</option>
           </select>
@@ -141,7 +141,7 @@
         <label><span data-i18n="settings.defaultMode">开机默认模式</span><select id="defaultModeInput"><option value="dashboard" data-i18n="modes.dashboard">系统仪表盘</option><option value="clock" data-i18n="modes.clock">环境时钟</option><option value="black" data-i18n="modes.black">黑屏待机</option><option value="terminal" data-i18n="modes.systemTerminal">系统终端</option></select></label>
         <label><span data-i18n="settings.backend">显示后端</span><select id="backendInput"><option value="auto" data-i18n="settings.backendAuto">自动：Wayland / DRM 回退</option><option value="wayland" data-i18n="settings.backendWayland">仅 Wayland</option><option value="drm" data-i18n="settings.backendDrm">仅 DRM</option></select></label>
         <label><span data-i18n="settings.audioDevice">HDMI 音频设备</span><input id="audioDeviceInput" type="text" placeholder="auto"></label>
-        <label><span data-i18n="settings.dashboardLanguage">HDMI 仪表盘语言</span><select id="dashboardLanguageInput"><option value="zh-CN">简体中文</option><option value="en-US">English</option></select></label>
+        <label><span data-i18n="settings.dashboardLanguage">显示语言</span><select id="dashboardLanguageInput"><option value="zh-CN">简体中文</option><option value="en-US">English</option></select></label>
         <label><span data-i18n="settings.dashboardTitle">仪表盘标题</span><input id="dashboardTitleInput" type="text" maxlength="64"></label>
         <label><span data-i18n="settings.mediaRoots">媒体目录</span><textarea id="mediaRootsInput" rows="4" spellcheck="false"></textarea><small data-i18n="settings.mediaRootsHint">每行一个目录，仅允许 /DATA、/media、/mnt 下的路径。</small></label>
         <label class="toggle-row"><input id="autoStartInput" type="checkbox"><span><b data-i18n="settings.autoStart">开机接管 HDMI</b><small data-i18n="settings.autoStartHint">关闭后开机保留系统终端</small></span></label>
@@ -150,6 +150,6 @@
     </dialog>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <script src="app.js?v=0.2.0"></script>
+    <script src="app.js?v=0.2.1"></script>
   </body>
 </html>

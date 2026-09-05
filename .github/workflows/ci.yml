@@ -33,6 +33,7 @@ jobs:
         run: |
           node --check web/app.js
           node scripts/check-i18n.mjs
+          node scripts/test-web-language.mjs
 
       - name: Check shell syntax
         run: sh -n scripts/*.sh packaging/raw/usr/libexec/zima-display/start-renderer

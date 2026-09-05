@@ -35,4 +35,13 @@ if (errors.length) {
   process.exit(1);
 }
 
+for (const fragment of [
+  "setLocale(event.target.value, true)",
+  "setLocale(saved.dashboard?.language || state.locale)"
+]) {
+  if (!app.includes(fragment)) {
+    throw new Error(`Missing unified language behavior: ${fragment}`);
+  }
+}
+
 console.log(`Checked ${referenceKeys.size} keys across ${locales.length} locales.`);

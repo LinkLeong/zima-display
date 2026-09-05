@@ -9,6 +9,7 @@ gofmt -w ./cmd ./internal
 go test ./...
 node --check web/app.js
 node scripts/check-i18n.mjs
+node scripts/test-web-language.mjs
 sh -n scripts/*.sh packaging/raw/usr/libexec/zima-display/start-renderer
 ```
 

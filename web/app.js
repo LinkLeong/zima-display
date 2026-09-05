@@ -2,7 +2,8 @@ const API = '/zima-display/api';
 const LOCALE_STORAGE_KEY = 'zima-display.locale';
 const translations = {
   'zh-CN': {
-    'language.label': '语言', 'language.aria': '界面语言',
+    'language.label': '语言', 'language.aria': '显示语言',
+    'language.synced': 'Web 和 HDMI 已切换为简体中文',
     'status.connecting': '服务连接中', 'status.online': '服务在线', 'status.offline': '服务离线',
     'settings.open': '打开设置',
     'preview.liveOutput': '实时输出', 'preview.autoDetect': '自动检测',
@@ -40,7 +41,7 @@ const translations = {
     'settings.defaultMode': '开机默认模式', 'settings.backend': '显示后端',
     'settings.backendAuto': '自动：Wayland / DRM 回退', 'settings.backendWayland': '仅 Wayland',
     'settings.backendDrm': '仅 DRM', 'settings.audioDevice': 'HDMI 音频设备',
-    'settings.dashboardLanguage': 'HDMI 仪表盘语言', 'settings.dashboardTitle': '仪表盘标题',
+    'settings.dashboardLanguage': '显示语言', 'settings.dashboardTitle': '仪表盘标题',
     'settings.mediaRoots': '媒体目录',
     'settings.mediaRootsHint': '每行一个目录，仅允许 /DATA、/media、/mnt 下的路径。',
     'settings.autoStart': '开机接管 HDMI', 'settings.autoStartHint': '关闭后开机保留系统终端',
@@ -50,7 +51,8 @@ const translations = {
     'common.close': '关闭', 'common.cancel': '取消', 'common.save': '保存设置'
   },
   'en-US': {
-    'language.label': 'LANGUAGE', 'language.aria': 'Interface language',
+    'language.label': 'LANGUAGE', 'language.aria': 'Display language',
+    'language.synced': 'Web and HDMI switched to English',
     'status.connecting': 'Connecting', 'status.online': 'Service online', 'status.offline': 'Service offline',
     'settings.open': 'Open settings',
     'preview.liveOutput': 'LIVE OUTPUT', 'preview.autoDetect': 'AUTO DETECT',
@@ -89,7 +91,7 @@ const translations = {
     'settings.defaultMode': 'Default mode at startup', 'settings.backend': 'Display backend',
     'settings.backendAuto': 'Auto: Wayland with DRM fallback', 'settings.backendWayland': 'Wayland only',
     'settings.backendDrm': 'DRM only', 'settings.audioDevice': 'HDMI audio device',
-    'settings.dashboardLanguage': 'HDMI dashboard language', 'settings.dashboardTitle': 'Dashboard title',
+    'settings.dashboardLanguage': 'Display language', 'settings.dashboardTitle': 'Dashboard title',
     'settings.mediaRoots': 'Media folders',
     'settings.mediaRootsHint': 'One folder per line. Paths must be under /DATA, /media or /mnt.',
     'settings.autoStart': 'Take over HDMI at startup',
@@ -103,7 +105,8 @@ const translations = {
 
 const state = {
   status: null, media: null, selected: new Set(), poll: null, volumeTimer: null,
-  locale: detectLocale(), serviceOnline: null
+  locale: detectLocale(), serviceOnline: null, pendingDashboardLocale: null,
+  localeSync: Promise.resolve()
 };
 
 const $ = id => document.getElementById(id);
@@ -134,7 +137,7 @@ function applyTranslations() {
   $('languageSelect').value = state.locale;
 }
 
-function setLocale(locale) {
+function setLocale(locale, syncDashboard = false) {
   state.locale = normalizeLocale(locale);
   try { localStorage.setItem(LOCALE_STORAGE_KEY, state.locale); } catch (_) { /* storage can be disabled */ }
   applyTranslations();
@@ -142,6 +145,29 @@ function setLocale(locale) {
   if (state.serviceOnline !== null) setConnectionBadge(state.serviceOnline);
   if (state.status) renderStatus(state.status);
   if (state.media) renderMedia();
+  if (syncDashboard) queueDashboardLocale(state.locale);
+}
+
+function queueDashboardLocale(locale) {
+  if (!state.status?.config) {
+    state.pendingDashboardLocale = locale;
+    return;
+  }
+  state.localeSync = state.localeSync.catch(() => {}).then(() => persistDashboardLocale(locale));
+}
+
+async function persistDashboardLocale(locale) {
+  const current = state.status?.config;
+  if (!current || current.dashboard?.language === locale) return;
+  const updated = JSON.parse(JSON.stringify(current));
+  updated.dashboard.language = locale;
+  try {
+    const saved = await request('/config', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) });
+    if (state.status) state.status.config = saved;
+    showToast(t('language.synced'));
+  } catch (error) {
+    showToast(error.message, true);
+  }
 }
 
 async function request(path, options = {}) {
@@ -204,6 +230,11 @@ async function refreshStatus() {
     state.status = data;
     renderStatus(data);
     setConnectionBadge(true);
+    if (state.pendingDashboardLocale) {
+      const locale = state.pendingDashboardLocale;
+      state.pendingDashboardLocale = null;
+      queueDashboardLocale(locale);
+    }
   } catch (error) {
     setConnectionBadge(false);
     console.error(error);
@@ -363,7 +394,9 @@ async function saveSettings(event) {
   updated.auto_start_display = $('autoStartInput').checked;
   updated.volume = Number($('volumeRange').value);
   try {
-    await request('/config', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) });
+    const saved = await request('/config', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) });
+    if (state.status) state.status.config = saved;
+    setLocale(saved.dashboard?.language || state.locale);
     $('settingsDialog').close();
     showToast(t('settings.saved'));
     await refreshStatus();
@@ -390,7 +423,7 @@ async function upload(file) {
 }
 
 function bindEvents() {
-  $('languageSelect').addEventListener('change', event => setLocale(event.target.value));
+  $('languageSelect').addEventListener('change', event => setLocale(event.target.value, true));
   $$('.mode-button').forEach(button => button.addEventListener('click', () => action({ action: 'mode', mode: button.dataset.mode }, t('settings.switched', { mode: modeTitle(button.dataset.mode) }))));
   $$('.transport button').forEach(button => button.addEventListener('click', () => action({ action: button.dataset.action })));
   $('progressRange').addEventListener('change', () => {

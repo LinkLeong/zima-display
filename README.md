@@ -10,7 +10,7 @@ It is installed as a `zpkg` / `systemd-sysext` `.raw` package. Docker is not req
 
 - Native ZimaOS sidebar UI with Simplified Chinese and English support.
 - HDMI dashboard with CPU, memory, storage, network, temperature, GPU, IP, OS and connector status.
-- Independent language settings for the browser UI and HDMI dashboard.
+- One language selector synchronizes the browser UI and HDMI dashboard.
 - Dashboard, clock, black standby, media playback and terminal modes.
 - Local video and image browser, playback queue and uploads up to 20 GB.
 - HTTP, HTTPS, HLS and RTSP network playback.
@@ -46,10 +46,10 @@ http://<zimaos-host>/modules/zima-display/index.html
 
 1. Connect the display before switching HDMI modes.
 2. Select **System dashboard**, **Ambient clock**, **Black standby**, or **Restore terminal** in the control panel.
-3. Open **Display settings** to configure the startup mode, DRM/Wayland backend, HDMI dashboard language, media folders and audio device.
+3. Open **Display settings** to configure the startup mode, DRM/Wayland backend, display language, media folders and audio device.
 4. Use the media panel to browse files, upload media, or play a network URL.
 
-The web UI follows the browser language on first use and stores manual selection locally. The HDMI dashboard language is a device-level setting and is stored in `config.json`.
+The web UI follows the browser language on first use. A manual language selection synchronizes the web UI and HDMI dashboard, and is stored both in the browser and the device `config.json`.
 
 ## Development
 
@@ -103,6 +103,10 @@ zima-display-renderer.service
 ```
 
 The HTTP service listens on loopback and registers through CasaOS Gateway, so its control API is not directly exposed to the LAN.
+
+## Automation roadmap
+
+The proposed DeepSeekHarness workflow for generated PPTX, Markdown and PDF content is documented in the [Chinese integration design](docs/deepseekharness-integration.zh-CN.md). This capability is planned and is not included in `v0.2.x` yet.
 
 ## API
 

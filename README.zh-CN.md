@@ -10,7 +10,7 @@ Zima Display 是一个面向 ZimaOS 的原生 HDMI 输出控制应用。它通�
 
 - ZimaOS 侧边栏原生控制界面，支持简体中文和英文。
 - HDMI 系统仪表盘：CPU、内存、存储、网络、温度、GPU、IP、系统版本和显示器状态。
-- Web 控制页和 HDMI 仪表盘可以分别设置语言。
+- 选择显示语言后，Web 控制页和 HDMI 仪表盘会同步切换。
 - 系统仪表盘、环境时钟、黑屏待机、媒体播放和恢复终端模式。
 - 本地视频和图片浏览、播放队列以及最大 20 GB 的媒体上传。
 - HTTP、HTTPS、HLS 和 RTSP 网络媒体播放。
@@ -46,10 +46,10 @@ http://<zimaos-host>/modules/zima-display/index.html
 
 1. 切换 HDMI 模式前先连接显示器。
 2. 在控制页选择“系统仪表盘”“环境时钟”“黑屏待机”或“恢复终端”。
-3. 打开“显示设置”，配置开机模式、DRM/Wayland 后端、HDMI 仪表盘语言、媒体目录和音频设备。
+3. 打开“显示设置”，配置开机模式、DRM/Wayland 后端、显示语言、媒体目录和音频设备。
 4. 在媒体面板浏览或上传文件，也可以直接输入网络媒体地址播放。
 
-Web 控制页首次打开时跟随浏览器语言，手动选择后保存在当前浏览器。HDMI 仪表盘语言属于设备配置，保存在 `config.json` 中。
+Web 控制页首次打开时跟随浏览器语言。手动选择中文或英文后，Web 和 HDMI 仪表盘会同步切换，语言同时保存在当前浏览器和设备 `config.json` 中。
 
 ## 本地开发
 
@@ -103,6 +103,10 @@ zima-display-renderer.service
 ```
 
 HTTP 服务只监听本机回环地址，并通过 CasaOS Gateway 注册，因此控制 API 不会直接暴露到局域网。
+
+## 自动化投屏规划
+
+DeepSeekHarness 生成 PPTX、Markdown 或 PDF 后自动投屏的推荐方案与交付物见 [DeepSeekHarness 投屏集成方案](docs/deepseekharness-integration.zh-CN.md)。该能力仍处于设计阶段，尚未包含在 `v0.2.x` 中。
 
 ## API
 
