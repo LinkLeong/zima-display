@@ -32,10 +32,13 @@ The tested and recommended renderer on Intel ZimaOS devices is direct DRM. Wayla
 
 Download `zima-display.raw` from a GitHub Release, copy it to the ZimaOS host, then run:
 
+Keep the filename `zima-display.raw`; `zpkg` validates the module filename.
+
 ```bash
 sudo zpkg install --force ./zima-display.raw
 sudo systemctl daemon-reload
-sudo systemctl enable --now zima-display.service
+sudo systemctl enable zima-display.service
+sudo systemctl restart zima-display.service
 ```
 
 Open **Zima Display** from the ZimaOS sidebar after installation. The page is also available at:

@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Zima Display Automation API
-  version: 0.3.0
+  version: 0.3.1
 servers:
   - url: http://zimaos-host/zima-display/api/v1
 security:

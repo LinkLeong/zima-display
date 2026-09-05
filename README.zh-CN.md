@@ -32,10 +32,13 @@ Intel ZimaOS 设备上已验证并推荐直接使用 DRM 渲染；Wayland 保留
 
 从 GitHub Release 下载 `zima-display.raw`，复制到 ZimaOS 后执行：
 
+请保留文件名 `zima-display.raw`，`zpkg` 会校验模块文件名。
+
 ```bash
 sudo zpkg install --force ./zima-display.raw
 sudo systemctl daemon-reload
-sudo systemctl enable --now zima-display.service
+sudo systemctl enable zima-display.service
+sudo systemctl restart zima-display.service
 ```
 
 安装完成后从 ZimaOS 侧边栏打开 **HDMI 显示**。也可以直接访问：

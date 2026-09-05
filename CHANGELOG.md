@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file. The project fol
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-09-05
+
+### Fixed
+
+- Accepted the DSH integration endpoint with or without a trailing slash.
+- Retried DSH detection automatically after a transient API or Gateway error.
+- Updated upgrade instructions to restart an already-running Zima Display service explicitly.
+
 ## [0.3.0] - 2026-09-05
 
 ### Added

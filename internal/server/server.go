@@ -111,6 +111,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc(apiPrefix+"/media", s.media)
 	mux.HandleFunc(apiPrefix+"/upload", s.upload)
 	mux.HandleFunc(apiPrefix+"/integration/dsh", s.dshIntegration)
+	mux.HandleFunc(apiPrefix+"/integration/dsh/", s.dshIntegration)
 	mux.Handle(apiPrefix+"/v1/", s.automationAuth(http.HandlerFunc(s.automation)))
 	return s.middleware(mux)
 }

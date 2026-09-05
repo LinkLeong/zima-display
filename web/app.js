@@ -46,6 +46,7 @@ const translations = {
     'dsh.converterMissing': 'Skill 已安装，PPT/PDF 转换组件需要修复',
     'dsh.install': '一键安装 Skill', 'dsh.update': '更新 Skill',
     'dsh.installing': '正在安装 DSH Skill...', 'dsh.completed': 'DSH Skill 安装完成，刷新 DSH 页面即可使用',
+    'dsh.retrying': '检测接口暂不可用，5 秒后自动重试',
     'settings.kicker': '设备策略', 'settings.heading': '显示设置',
     'settings.defaultMode': '开机默认模式', 'settings.backend': '显示后端',
     'settings.backendAuto': '自动：Wayland / DRM 回退', 'settings.backendWayland': '仅 Wayland',
@@ -105,6 +106,7 @@ const translations = {
     'dsh.converterMissing': 'Skill installed; PPT/PDF converters need repair',
     'dsh.install': 'Install Skill', 'dsh.update': 'Update Skill',
     'dsh.installing': 'Installing the DSH skill...', 'dsh.completed': 'DSH skill installed. Refresh DSH to use it.',
+    'dsh.retrying': 'Detection is temporarily unavailable; retrying in 5 seconds',
     'settings.kicker': 'DEVICE POLICY', 'settings.heading': 'Display settings',
     'settings.defaultMode': 'Default mode at startup', 'settings.backend': 'Display backend',
     'settings.backendAuto': 'Auto: Wayland with DRM fallback', 'settings.backendWayland': 'Wayland only',
@@ -324,7 +326,8 @@ async function loadDSHIntegration() {
     if (status.converter_state === 'installing') state.dshPoll = setTimeout(loadDSHIntegration, 5000);
   } catch (error) {
     button.disabled = true;
-    setText('dshState', error.message);
+    setText('dshState', error.message.includes('404') ? t('dsh.retrying') : error.message);
+    state.dshPoll = setTimeout(loadDSHIntegration, 5000);
   }
 }
 
