@@ -3,11 +3,13 @@ package player
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,6 +21,26 @@ type readyRunner struct{}
 
 func (readyRunner) Run(context.Context, string, ...string) error { return nil }
 func (readyRunner) Output(context.Context, string, ...string) ([]byte, error) {
+	return nil, nil
+}
+
+type restartRunner struct {
+	mu        sync.Mutex
+	restarts  int
+	onRestart func() error
+}
+
+func (r *restartRunner) Run(_ context.Context, name string, args ...string) error {
+	if name != "systemctl" || len(args) == 0 || args[0] != "restart" {
+		return nil
+	}
+	r.mu.Lock()
+	r.restarts++
+	r.mu.Unlock()
+	return r.onRestart()
+}
+
+func (*restartRunner) Output(context.Context, string, ...string) ([]byte, error) {
 	return nil, nil
 }
 
@@ -34,29 +56,131 @@ func TestAsFloat(t *testing.T) {
 	}
 }
 
-func TestSocketReadyRejectsStaleSocket(t *testing.T) {
-	directory, err := os.MkdirTemp("/tmp", "zd-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(directory) })
+func TestMPVReadyRequiresIPCResponse(t *testing.T) {
+	directory := t.TempDir()
 	socketPath := filepath.Join(directory, "mpv.sock")
 	listener, err := net.Listen("unix", socketPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	unixListener := listener.(*net.UnixListener)
-	unixListener.SetUnlinkOnClose(false)
+	t.Cleanup(func() { _ = listener.Close() })
+	go func() {
+		connection, acceptErr := listener.Accept()
+		if acceptErr == nil {
+			_ = connection.Close()
+		}
+	}()
 
-	manager := New(socketPath, t.TempDir(), nil)
-	if !manager.socketReady(context.Background()) {
-		t.Fatal("expected listening socket to be ready")
+	manager := New(socketPath, directory, config.Default)
+	if manager.mpvReady(context.Background()) {
+		t.Fatal("socket without an IPC response must not be considered ready")
 	}
-	if err := listener.Close(); err != nil {
+}
+
+func TestStatusRequiresReadyMPVIPC(t *testing.T) {
+	manager := New(filepath.Join(t.TempDir(), "missing.sock"), t.TempDir(), config.Default)
+	manager.runner = readyRunner{}
+	status := manager.Status(context.Background())
+	if status.RendererReady {
+		t.Fatal("active renderer service without mpv IPC must not be reported as ready")
+	}
+}
+
+func TestDashboardModeRecoversLostMPVConnection(t *testing.T) {
+	directory, err := os.MkdirTemp("/tmp", "zd-recover-")
+	if err != nil {
 		t.Fatal(err)
 	}
-	if manager.socketReady(context.Background()) {
-		t.Fatal("expected stale socket path to be rejected")
+	t.Cleanup(func() { _ = os.RemoveAll(directory) })
+	socketPath := filepath.Join(directory, "mpv.sock")
+	commands := make(chan []any, 16)
+
+	var listenerMu sync.Mutex
+	listener, err := net.Listen("unix", socketPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	serve := func(current net.Listener, dropCommand int) {
+		go func() {
+			count := 0
+			for {
+				connection, acceptErr := current.Accept()
+				if acceptErr != nil {
+					return
+				}
+				count++
+				var request struct {
+					Command   []any `json:"command"`
+					RequestID int64 `json:"request_id"`
+				}
+				if json.NewDecoder(connection).Decode(&request) == nil {
+					commands <- request.Command
+					if count != dropCommand {
+						_ = json.NewEncoder(connection).Encode(map[string]any{"error": "success", "request_id": request.RequestID})
+					}
+				}
+				_ = connection.Close()
+			}
+		}()
+	}
+	serve(listener, 2) // The first real command loses its connection after the readiness probe.
+
+	runner := &restartRunner{}
+	runner.onRestart = func() error {
+		listenerMu.Lock()
+		defer listenerMu.Unlock()
+		_ = listener.Close()
+		newListener, listenErr := net.Listen("unix", socketPath)
+		if listenErr != nil {
+			return listenErr
+		}
+		listener = newListener
+		serve(listener, 0)
+		return nil
+	}
+	t.Cleanup(func() {
+		listenerMu.Lock()
+		_ = listener.Close()
+		listenerMu.Unlock()
+	})
+
+	manager := New(socketPath, directory, config.Default)
+	manager.runner = runner
+	if err := manager.SetMode(context.Background(), "dashboard"); err != nil {
+		t.Fatal(err)
+	}
+	runner.mu.Lock()
+	restarts := runner.restarts
+	runner.mu.Unlock()
+	if restarts != 1 {
+		t.Fatalf("renderer restarts = %d, want 1", restarts)
+	}
+	if manager.mode != "dashboard" || manager.lastError != "" {
+		t.Fatalf("manager did not recover cleanly: mode=%q error=%q", manager.mode, manager.lastError)
+	}
+
+	loadCommands := 0
+	overlayCommands := 0
+	for len(commands) > 0 {
+		command := <-commands
+		if len(command) > 0 && command[0] == "loadfile" {
+			loadCommands++
+		}
+		if len(command) > 0 && command[0] == "osd-overlay" {
+			overlayCommands++
+		}
+	}
+	if loadCommands != 2 || overlayCommands != 1 {
+		t.Fatalf("recovery commands: loadfile=%d overlay=%d", loadCommands, overlayCommands)
+	}
+}
+
+func TestMPVLogicalErrorsDoNotTriggerConnectionRecovery(t *testing.T) {
+	if isMPVConnectionError(errors.New("mpv command failed: property unavailable")) {
+		t.Fatal("logical mpv errors must not be treated as connection failures")
+	}
+	if !isMPVConnectionError(errMPVConnectionClosed) {
+		t.Fatal("closed mpv connection must trigger recovery")
 	}
 }
 
@@ -73,7 +197,7 @@ func TestDashboardModeLoadsGeneratedVideo(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = listener.Close() })
 
-	requests := make(chan []any, 3)
+	requests := make(chan []any, 4)
 	go func() {
 		for {
 			connection, acceptErr := listener.Accept()
@@ -98,6 +222,7 @@ func TestDashboardModeLoadsGeneratedVideo(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := [][]any{
+		{"get_property", "idle-active"},
 		{"loadfile", dashboardVideoSource, "replace"},
 		{"set_property", "pause", false},
 	}

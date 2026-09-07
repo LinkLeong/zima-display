@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -14,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"zima-display/internal/config"
@@ -24,6 +26,8 @@ const (
 	rendererService      = "zima-display-renderer.service"
 	dashboardVideoSource = "av://lavfi:color=c=black:s=1920x1080:r=1"
 )
+
+var errMPVConnectionClosed = errors.New("mpv closed the control connection without a response")
 
 type Status struct {
 	Mode          string              `json:"mode"`
@@ -113,11 +117,10 @@ func (m *Manager) SetMode(ctx context.Context, mode string) error {
 		return nil
 	}
 
-	if err := m.ensureRendererLocked(ctx); err != nil {
-		return m.fail(err)
-	}
 	if mode == "dashboard" || mode == "canvas" || mode == "clock" || mode == "black" {
-		if err := m.showGeneratedModeLocked(ctx, mode); err != nil {
+		if err := m.runRendererOperationLocked(ctx, func() error {
+			return m.showGeneratedModeLocked(ctx, mode)
+		}); err != nil {
 			return m.fail(err)
 		}
 	}
@@ -133,18 +136,20 @@ func (m *Manager) Play(ctx context.Context, targets []string) error {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if err := m.ensureRendererLocked(ctx); err != nil {
+	if err := m.runRendererOperationLocked(ctx, func() error {
+		m.closeOverlayLocked()
+		for index, target := range targets {
+			mode := "append-play"
+			if index == 0 {
+				mode = "replace"
+			}
+			if err := m.send(ctx, []any{"loadfile", target, mode}, nil); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
 		return m.fail(err)
-	}
-	m.closeOverlayLocked()
-	for index, target := range targets {
-		mode := "append-play"
-		if index == 0 {
-			mode = "replace"
-		}
-		if err := m.send(ctx, []any{"loadfile", target, mode}, nil); err != nil {
-			return m.fail(err)
-		}
 	}
 	m.clearPresentationLocked()
 	m.mode = "video"
@@ -161,20 +166,16 @@ func (m *Manager) Present(ctx context.Context, id, title, kind string, pages []s
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if err := m.ensureRendererLocked(ctx); err != nil {
-		return m.fail(err)
-	}
-	if kind == "text" {
-		if err := m.send(ctx, []any{"loadfile", dashboardVideoSource, "replace"}, nil); err != nil {
-			return m.fail(err)
+	if err := m.runRendererOperationLocked(ctx, func() error {
+		if kind == "text" {
+			if err := m.send(ctx, []any{"loadfile", dashboardVideoSource, "replace"}, nil); err != nil {
+				return err
+			}
+			if err := m.send(ctx, []any{"set_property", "pause", false}, nil); err != nil {
+				return err
+			}
+			return m.setOverlayLocked(ctx, renderDocument(title, pages[0], 0, len(pages)))
 		}
-		if err := m.send(ctx, []any{"set_property", "pause", false}, nil); err != nil {
-			return m.fail(err)
-		}
-		if err := m.setOverlayLocked(ctx, renderDocument(title, pages[0], 0, len(pages))); err != nil {
-			return m.fail(err)
-		}
-	} else {
 		m.closeOverlayLocked()
 		for index, page := range pages {
 			mode := "append-play"
@@ -182,9 +183,12 @@ func (m *Manager) Present(ctx context.Context, id, title, kind string, pages []s
 				mode = "replace"
 			}
 			if err := m.send(ctx, []any{"loadfile", page, mode}, nil); err != nil {
-				return m.fail(err)
+				return err
 			}
 		}
+		return nil
+	}); err != nil {
+		return m.fail(err)
 	}
 	m.presentationID = id
 	m.presentationTitle = title
@@ -208,7 +212,9 @@ func (m *Manager) Pause(ctx context.Context, paused bool) error {
 func (m *Manager) Stop(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if err := m.showGeneratedModeLocked(ctx, "dashboard"); err != nil {
+	if err := m.runRendererOperationLocked(ctx, func() error {
+		return m.showGeneratedModeLocked(ctx, "dashboard")
+	}); err != nil {
 		return m.fail(err)
 	}
 	m.clearPresentationLocked()
@@ -366,6 +372,9 @@ func (m *Manager) Status(ctx context.Context) Status {
 	if err := m.runner.Run(checkCtx, "systemctl", "is-active", "--quiet", rendererService); err != nil {
 		return status
 	}
+	if !m.mpvReady(checkCtx) {
+		return status
+	}
 	status.RendererReady = true
 	properties := map[string]any{}
 	for _, property := range []string{"pause", "time-pos", "duration", "volume", "media-title", "path", "playlist-pos", "playlist-count"} {
@@ -417,11 +426,32 @@ func (m *Manager) clearPresentationLocked() {
 func (m *Manager) ensureRendererLocked(ctx context.Context) error {
 	checkCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	err := m.runner.Run(checkCtx, "systemctl", "is-active", "--quiet", rendererService)
-	if err == nil && m.socketReady(checkCtx) {
+	if err == nil && m.mpvReady(checkCtx) {
 		cancel()
 		return nil
 	}
 	cancel()
+	return m.restartRendererLocked(ctx)
+}
+
+func (m *Manager) runRendererOperationLocked(ctx context.Context, operation func() error) error {
+	if err := m.ensureRendererLocked(ctx); err != nil {
+		return err
+	}
+	firstErr := operation()
+	if firstErr == nil || ctx.Err() != nil || !isMPVConnectionError(firstErr) {
+		return firstErr
+	}
+	if err := m.restartRendererLocked(ctx); err != nil {
+		return fmt.Errorf("mpv connection lost (%v); renderer recovery failed: %w", firstErr, err)
+	}
+	if err := operation(); err != nil {
+		return fmt.Errorf("mpv operation failed after renderer recovery: %w", err)
+	}
+	return nil
+}
+
+func (m *Manager) restartRendererLocked(ctx context.Context) error {
 	if err := m.prepareRuntimeLocked(); err != nil {
 		return err
 	}
@@ -435,7 +465,10 @@ func (m *Manager) ensureRendererLocked(ctx context.Context) error {
 	}
 	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
-		if m.socketReady(ctx) {
+		probeCtx, probeCancel := context.WithTimeout(ctx, time.Second)
+		ready := m.mpvReady(probeCtx)
+		probeCancel()
+		if ready {
 			return nil
 		}
 		select {
@@ -447,14 +480,21 @@ func (m *Manager) ensureRendererLocked(ctx context.Context) error {
 	return errors.New("renderer started but mpv control socket did not appear")
 }
 
-func (m *Manager) socketReady(ctx context.Context) bool {
-	dialer := net.Dialer{Timeout: 250 * time.Millisecond}
-	connection, err := dialer.DialContext(ctx, "unix", m.socketPath)
-	if err != nil {
+func (m *Manager) mpvReady(ctx context.Context) bool {
+	return m.send(ctx, []any{"get_property", "idle-active"}, nil) == nil
+}
+
+func isMPVConnectionError(err error) bool {
+	if err == nil {
 		return false
 	}
-	_ = connection.Close()
-	return true
+	if errors.Is(err, errMPVConnectionClosed) || errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed) ||
+		errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.ECONNRESET) ||
+		errors.Is(err, syscall.EPIPE) || errors.Is(err, syscall.ENOENT) {
+		return true
+	}
+	var netErr net.Error
+	return errors.As(err, &netErr)
 }
 
 func (m *Manager) prepareRuntimeLocked() error {
@@ -518,7 +558,7 @@ func (m *Manager) send(ctx context.Context, command []any, destination *any) err
 	if err := scanner.Err(); err != nil {
 		return err
 	}
-	return errors.New("mpv closed the control connection without a response")
+	return errMPVConnectionClosed
 }
 
 func (m *Manager) fail(err error) error {

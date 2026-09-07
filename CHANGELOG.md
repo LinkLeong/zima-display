@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file. The project fol
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-09-07
+
+### Fixed
+
+- Verified mpv readiness with a real IPC response instead of only checking whether the Unix socket accepts connections.
+- Restarted the HDMI renderer and retried safe display operations once after refused, reset, broken or vanished mpv socket connections.
+- Reported the renderer as ready only after mpv answers IPC, avoiding false-ready status while no display is connected or mpv is restarting.
+
 ## [0.4.0] - 2026-09-05
 
 ### Added
