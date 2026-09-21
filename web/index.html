@@ -7,7 +7,7 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>Zima Display</title>
     <link rel="icon" type="image/svg+xml" href="appicon.svg">
-    <link rel="stylesheet" href="styles.css?v=0.4.0">
+    <link rel="stylesheet" href="styles.css?v=0.4.1">
   </head>
   <body>
     <div class="grain" aria-hidden="true"></div>
@@ -171,6 +171,11 @@
         <div class="browser-toolbar">
           <button id="parentButton" type="button" disabled aria-label="返回上级" data-i18n-aria-label="media.parent">&#8592;</button>
           <code id="currentPath">媒体根目录</code>
+          <div class="slideshow-controls">
+            <label for="slideshowInterval" data-i18n="media.interval">每张停留</label>
+            <select id="slideshowInterval" aria-label="每张图片停留时间" data-i18n-aria-label="media.intervalAria"><option value="3">3s</option><option value="5">5s</option><option value="8" selected>8s</option><option value="10">10s</option><option value="15">15s</option><option value="30">30s</option></select>
+            <button id="playDirectoryButton" class="slideshow-button" type="button" disabled data-i18n="media.playDirectory">轮播此目录</button>
+          </div>
           <button id="refreshMediaButton" type="button" data-i18n="media.refresh">刷新</button>
         </div>
         <div id="mediaList" class="media-list">
@@ -200,6 +205,6 @@
     </dialog>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <script src="app.js?v=0.4.0"></script>
+    <script src="app.js?v=0.4.1"></script>
   </body>
 </html>

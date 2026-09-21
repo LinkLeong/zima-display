@@ -95,15 +95,15 @@ paths:
               properties:
                 action:
                   type: string
-                  enum: [mode, play, pause, resume, stop, seek, volume, next, previous]
+                  enum: [mode, play, slideshow, pause, resume, stop, seek, volume, next, previous]
                 mode:
                   type: string
                   enum: [dashboard, canvas, clock, black, terminal]
-                path: {type: string}
+                path: {type: string, description: Media file/URL, or an image directory for slideshow}
                 paths:
                   type: array
                   items: {type: string}
-                value: {type: number}
+                value: {type: number, description: Seek/volume value, or slideshow seconds per image}
       responses:
         "200": {description: Action completed}
   /upload:

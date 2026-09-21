@@ -15,7 +15,8 @@ It is installed as a `zpkg` / `systemd-sysext` `.raw` package. Docker is not req
 - System overview, giant clock and minimal canvas templates with solid, gradient and uploaded-image backgrounds.
 - One language selector synchronizes the browser UI and HDMI dashboard.
 - Dashboard, clock, black standby, media playback and terminal modes.
-- Local video and image browser, playback queue and uploads up to 20 GB.
+- Local video and image browser, infinitely looping playback queue and uploads up to 20 GB.
+- Exhibition slideshow mode that loops images from a chosen folder in filename order with an adjustable interval.
 - HTTP, HTTPS, HLS and RTSP network playback.
 - Playback, seek, playlist and HDMI volume controls.
 - Persistent configuration under `/DATA/AppData/zima-display`.

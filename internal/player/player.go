@@ -138,21 +138,39 @@ func (m *Manager) Play(ctx context.Context, targets []string) error {
 	defer m.mu.Unlock()
 	if err := m.runRendererOperationLocked(ctx, func() error {
 		m.closeOverlayLocked()
-		for index, target := range targets {
-			mode := "append-play"
-			if index == 0 {
-				mode = "replace"
-			}
-			if err := m.send(ctx, []any{"loadfile", target, mode}, nil); err != nil {
-				return err
-			}
+		if err := m.setPlaybackOptionsLocked(ctx, "inf", "inf"); err != nil {
+			return err
 		}
-		return nil
+		return m.loadPlaylistLocked(ctx, targets)
 	}); err != nil {
 		return m.fail(err)
 	}
 	m.clearPresentationLocked()
 	m.mode = "video"
+	m.lastError = ""
+	return nil
+}
+
+func (m *Manager) Slideshow(ctx context.Context, images []string, durationSeconds float64) error {
+	if len(images) == 0 {
+		return errors.New("slideshow contains no images")
+	}
+	if durationSeconds < 1 || durationSeconds > 300 {
+		return errors.New("slideshow duration must be between 1 and 300 seconds")
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := m.runRendererOperationLocked(ctx, func() error {
+		m.closeOverlayLocked()
+		if err := m.setPlaybackOptionsLocked(ctx, "inf", durationSeconds); err != nil {
+			return err
+		}
+		return m.loadPlaylistLocked(ctx, images)
+	}); err != nil {
+		return m.fail(err)
+	}
+	m.clearPresentationLocked()
+	m.mode = "slideshow"
 	m.lastError = ""
 	return nil
 }
@@ -167,6 +185,9 @@ func (m *Manager) Present(ctx context.Context, id, title, kind string, pages []s
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if err := m.runRendererOperationLocked(ctx, func() error {
+		if err := m.setPlaybackOptionsLocked(ctx, "no", "inf"); err != nil {
+			return err
+		}
 		if kind == "text" {
 			if err := m.send(ctx, []any{"loadfile", dashboardVideoSource, "replace"}, nil); err != nil {
 				return err
@@ -177,16 +198,7 @@ func (m *Manager) Present(ctx context.Context, id, title, kind string, pages []s
 			return m.setOverlayLocked(ctx, renderDocument(title, pages[0], 0, len(pages)))
 		}
 		m.closeOverlayLocked()
-		for index, page := range pages {
-			mode := "append-play"
-			if index == 0 {
-				mode = "replace"
-			}
-			if err := m.send(ctx, []any{"loadfile", page, mode}, nil); err != nil {
-				return err
-			}
-		}
-		return nil
+		return m.loadPlaylistLocked(ctx, pages)
 	}); err != nil {
 		return m.fail(err)
 	}
@@ -228,6 +240,9 @@ func (m *Manager) showGeneratedModeLocked(ctx context.Context, mode string) erro
 	cfg := m.config()
 	if mode == "canvas" && cfg.Canvas.BackgroundType == "image" && cfg.Canvas.BackgroundImage != "" {
 		source = cfg.Canvas.BackgroundImage
+	}
+	if err := m.setPlaybackOptionsLocked(ctx, "no", "inf"); err != nil {
+		return err
 	}
 	if err := m.send(ctx, []any{"loadfile", source, "replace"}, nil); err != nil {
 		return err
@@ -404,7 +419,7 @@ func (m *Manager) Status(ctx context.Context) Status {
 		status.MediaTitle = m.presentationTitle
 		status.Position = 0
 		status.Duration = 0
-	} else if m.mode != "video" {
+	} else if m.mode != "video" && m.mode != "slideshow" {
 		status.Position = 0
 		status.Duration = 0
 		status.MediaTitle = ""
@@ -413,6 +428,26 @@ func (m *Manager) Status(ctx context.Context) Status {
 		status.PlaylistCount = 0
 	}
 	return status
+}
+
+func (m *Manager) setPlaybackOptionsLocked(ctx context.Context, playlistLoop, imageDuration any) error {
+	if err := m.send(ctx, []any{"set_property", "loop-playlist", playlistLoop}, nil); err != nil {
+		return err
+	}
+	return m.send(ctx, []any{"set_property", "image-display-duration", imageDuration}, nil)
+}
+
+func (m *Manager) loadPlaylistLocked(ctx context.Context, targets []string) error {
+	for index, target := range targets {
+		mode := "append-play"
+		if index == 0 {
+			mode = "replace"
+		}
+		if err := m.send(ctx, []any{"loadfile", target, mode}, nil); err != nil {
+			return err
+		}
+	}
+	return m.send(ctx, []any{"set_property", "pause", false}, nil)
 }
 
 func (m *Manager) clearPresentationLocked() {

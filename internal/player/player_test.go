@@ -160,18 +160,22 @@ func TestDashboardModeRecoversLostMPVConnection(t *testing.T) {
 	}
 
 	loadCommands := 0
+	loopCommands := 0
 	overlayCommands := 0
 	for len(commands) > 0 {
 		command := <-commands
 		if len(command) > 0 && command[0] == "loadfile" {
 			loadCommands++
 		}
+		if len(command) > 2 && command[0] == "set_property" && command[1] == "loop-playlist" {
+			loopCommands++
+		}
 		if len(command) > 0 && command[0] == "osd-overlay" {
 			overlayCommands++
 		}
 	}
-	if loadCommands != 2 || overlayCommands != 1 {
-		t.Fatalf("recovery commands: loadfile=%d overlay=%d", loadCommands, overlayCommands)
+	if loadCommands != 1 || loopCommands != 2 || overlayCommands != 1 {
+		t.Fatalf("recovery commands: loadfile=%d loop=%d overlay=%d", loadCommands, loopCommands, overlayCommands)
 	}
 }
 
@@ -197,7 +201,7 @@ func TestDashboardModeLoadsGeneratedVideo(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = listener.Close() })
 
-	requests := make(chan []any, 4)
+	requests := make(chan []any, 16)
 	go func() {
 		for {
 			connection, acceptErr := listener.Accept()
@@ -223,6 +227,8 @@ func TestDashboardModeLoadsGeneratedVideo(t *testing.T) {
 	}
 	want := [][]any{
 		{"get_property", "idle-active"},
+		{"set_property", "loop-playlist", "no"},
+		{"set_property", "image-display-duration", "inf"},
 		{"loadfile", dashboardVideoSource, "replace"},
 		{"set_property", "pause", false},
 	}
@@ -250,6 +256,97 @@ func TestDashboardModeLoadsGeneratedVideo(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for overlay request")
+	}
+}
+
+func TestMediaPlaybackAndSlideshowConfigureInfiniteLoops(t *testing.T) {
+	directory, err := os.MkdirTemp("/tmp", "zd-play-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(directory) })
+	socketPath := filepath.Join(directory, "mpv.sock")
+	listener, err := net.Listen("unix", socketPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+
+	requests := make(chan []any, 8)
+	go func() {
+		for {
+			connection, acceptErr := listener.Accept()
+			if acceptErr != nil {
+				return
+			}
+			var request struct {
+				Command   []any `json:"command"`
+				RequestID int64 `json:"request_id"`
+			}
+			if json.NewDecoder(connection).Decode(&request) == nil {
+				requests <- request.Command
+				_ = json.NewEncoder(connection).Encode(map[string]any{"error": "success", "request_id": request.RequestID})
+			}
+			_ = connection.Close()
+		}
+	}()
+
+	manager := New(socketPath, directory, config.Default)
+	manager.runner = readyRunner{}
+	if err := manager.Play(context.Background(), []string{"/DATA/demo-a.mp4", "/DATA/demo-b.mp4"}); err != nil {
+		t.Fatal(err)
+	}
+	want := [][]any{
+		{"get_property", "idle-active"},
+		{"set_property", "loop-playlist", "inf"},
+		{"set_property", "image-display-duration", "inf"},
+		{"loadfile", "/DATA/demo-a.mp4", "replace"},
+		{"loadfile", "/DATA/demo-b.mp4", "append-play"},
+		{"set_property", "pause", false},
+	}
+	for index := range want {
+		select {
+		case got := <-requests:
+			if !reflect.DeepEqual(got, want[index]) {
+				t.Fatalf("request %d: got %#v want %#v", index, got, want[index])
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("timed out waiting for request %d", index)
+		}
+	}
+	if manager.mode != "video" {
+		t.Fatalf("mode = %q, want video", manager.mode)
+	}
+
+	if err := manager.Slideshow(context.Background(), []string{"/DATA/poster.jpg"}, 8); err != nil {
+		t.Fatal(err)
+	}
+	want = [][]any{
+		{"get_property", "idle-active"},
+		{"set_property", "loop-playlist", "inf"},
+		{"set_property", "image-display-duration", float64(8)},
+		{"loadfile", "/DATA/poster.jpg", "replace"},
+		{"set_property", "pause", false},
+	}
+	for index := range want {
+		select {
+		case got := <-requests:
+			if !reflect.DeepEqual(got, want[index]) {
+				t.Fatalf("slideshow request %d: got %#v want %#v", index, got, want[index])
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("timed out waiting for slideshow request %d", index)
+		}
+	}
+	if manager.mode != "slideshow" {
+		t.Fatalf("mode = %q, want slideshow", manager.mode)
+	}
+}
+
+func TestSlideshowRejectsUnsafeDuration(t *testing.T) {
+	manager := New(filepath.Join(t.TempDir(), "missing.sock"), t.TempDir(), config.Default)
+	if err := manager.Slideshow(context.Background(), []string{"/DATA/demo.jpg"}, 0.5); err == nil {
+		t.Fatal("expected an unsafe slideshow duration to fail")
 	}
 }
 

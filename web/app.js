@@ -19,12 +19,12 @@ const translations = {
     'modes.clock': '环境时钟', 'modes.clockHint': '低干扰常亮信息',
     'modes.black': '黑屏待机', 'modes.blackHint': '播放器保持在线',
     'modes.terminal': '恢复终端', 'modes.systemTerminal': '系统终端',
-    'modes.terminalHint': '释放 HDMI 与 TTY1', 'modes.video': '媒体播放', 'modes.unknown': '未知模式',
+    'modes.terminalHint': '释放 HDMI 与 TTY1', 'modes.video': '媒体播放', 'modes.slideshow': '图片轮播', 'modes.unknown': '未知模式',
     'modes.presentation': '文档投屏',
     'modePreview.dashboard': '系统仪表盘', 'modePreview.clock': '环境时钟',
     'modePreview.canvas': '自由画布',
     'modePreview.black': '黑屏待机', 'modePreview.terminal': '系统终端',
-    'modePreview.video': '媒体播放', 'modePreview.presentation': '文档投屏', 'modePreview.unknown': '未知模式',
+    'modePreview.video': '媒体播放', 'modePreview.slideshow': '图片轮播', 'modePreview.presentation': '文档投屏', 'modePreview.unknown': '未知模式',
     'metrics.aria': '系统指标', 'metrics.cpu': 'CPU 负载', 'metrics.load': '负载 {value}',
     'metrics.memory': '内存', 'metrics.storage': '存储', 'metrics.network': '网络',
     'metrics.thermal': '温度 / GPU', 'metrics.waitingNetwork': '等待网络',
@@ -56,6 +56,8 @@ const translations = {
     'media.kind.video': '视频', 'media.kind.image': '图片',
     'media.play': '播放', 'media.open': '打开', 'media.playing': '正在播放 {name}',
     'media.openingNetwork': '正在打开网络媒体', 'media.loaded': '已载入 {count} 个媒体',
+    'media.interval': '每张停留', 'media.intervalAria': '每张图片停留时间',
+    'media.playDirectory': '轮播此目录', 'media.slideshowStarted': '正在循环播放 {count} 张图片，每张 {seconds} 秒',
     'media.uploading': '正在上传 {name}', 'media.uploaded': '{name} 上传完成',
     'dsh.kicker': '智能体集成', 'dsh.heading': 'DeepSeek Harness',
     'dsh.description': '自动发现 ZimaOS 商店版 DSH，并安装持久化投屏 Skill。无需进入容器。',
@@ -104,13 +106,13 @@ const translations = {
     'modes.clock': 'Ambient clock', 'modes.clockHint': 'Always-on, low-distraction view',
     'modes.black': 'Black standby', 'modes.blackHint': 'Keep the renderer online',
     'modes.terminal': 'Restore terminal', 'modes.systemTerminal': 'System terminal',
-    'modes.terminalHint': 'Release HDMI and TTY1', 'modes.video': 'Media playback',
+    'modes.terminalHint': 'Release HDMI and TTY1', 'modes.video': 'Media playback', 'modes.slideshow': 'Image slideshow',
     'modes.presentation': 'Presentation',
     'modes.unknown': 'Unknown mode',
     'modePreview.dashboard': 'SYSTEM DASHBOARD', 'modePreview.clock': 'AMBIENT CLOCK',
     'modePreview.canvas': 'FREE CANVAS',
     'modePreview.black': 'BLACK STANDBY', 'modePreview.terminal': 'SYSTEM TERMINAL',
-    'modePreview.video': 'MEDIA PLAYBACK', 'modePreview.presentation': 'PRESENTATION', 'modePreview.unknown': 'UNKNOWN MODE',
+    'modePreview.video': 'MEDIA PLAYBACK', 'modePreview.slideshow': 'IMAGE SLIDESHOW', 'modePreview.presentation': 'PRESENTATION', 'modePreview.unknown': 'UNKNOWN MODE',
     'metrics.aria': 'System metrics', 'metrics.cpu': 'CPU LOAD', 'metrics.load': 'Load {value}',
     'metrics.memory': 'MEMORY', 'metrics.storage': 'STORAGE', 'metrics.network': 'NETWORK',
     'metrics.thermal': 'THERMAL / GPU', 'metrics.waitingNetwork': 'Waiting for network',
@@ -142,6 +144,8 @@ const translations = {
     'media.kind.video': 'VIDEO', 'media.kind.image': 'IMAGE',
     'media.play': 'Play', 'media.open': 'Open', 'media.playing': 'Playing {name}',
     'media.openingNetwork': 'Opening network media', 'media.loaded': 'Loaded {count} media items',
+    'media.interval': 'Hold each', 'media.intervalAria': 'Time to show each image',
+    'media.playDirectory': 'Loop this folder', 'media.slideshowStarted': 'Looping {count} images at {seconds} seconds each',
     'media.uploading': 'Uploading {name}', 'media.uploaded': '{name} uploaded',
     'dsh.kicker': 'AGENT INTEGRATION', 'dsh.heading': 'DeepSeek Harness',
     'dsh.description': 'Automatically detect the ZimaOS Store DSH container and persistently install the display skill. No container shell required.',
@@ -516,9 +520,12 @@ async function loadMedia(path = '') {
 
 function renderMedia() {
   const data = state.media || { entries: [] };
+  const imageCount = data.entries?.filter(entry => entry.kind === 'image').length || 0;
   setText('currentPath', data.path || t('media.root'));
   $('parentButton').disabled = !data.parent && !data.path;
   $('parentButton').dataset.path = data.parent || '';
+  $('playDirectoryButton').disabled = !data.path || imageCount === 0;
+  $('playDirectoryButton').dataset.count = imageCount;
   const list = $('mediaList');
   list.replaceChildren();
   if (!data.entries?.length) {
@@ -966,6 +973,11 @@ function bindEvents() {
   $('urlInput').addEventListener('keydown', event => { if (event.key === 'Enter') $('playUrlButton').click(); });
   $('parentButton').addEventListener('click', () => loadMedia($('parentButton').dataset.path));
   $('refreshMediaButton').addEventListener('click', () => loadMedia(state.media?.path || ''));
+  $('playDirectoryButton').addEventListener('click', () => {
+    const seconds = Number($('slideshowInterval').value);
+    const count = Number($('playDirectoryButton').dataset.count || 0);
+    if (state.media?.path && count > 0) action({ action: 'slideshow', path: state.media.path, value: seconds }, t('media.slideshowStarted', { count, seconds }));
+  });
   $('playSelectedButton').addEventListener('click', () => action({ action: 'play', paths: Array.from(state.selected) }, t('media.loaded', { count: state.selected.size })));
   $('uploadButton').addEventListener('click', () => $('uploadInput').click());
   $('uploadInput').addEventListener('change', event => upload(event.target.files?.[0]));

@@ -7,7 +7,9 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"zima-display/internal/config"
@@ -39,6 +41,38 @@ func TestResolveTargetAllowsSupportedNetworkMedia(t *testing.T) {
 func TestMediaKind(t *testing.T) {
 	if mediaKind("movie.MKV", false) != "video" || mediaKind("photo.webp", false) != "image" || mediaKind("notes.txt", false) != "" {
 		t.Fatal("media type detection returned an unexpected result")
+	}
+}
+
+func TestResolveSlideshowTargetsSortsImagesAndIgnoresOtherFiles(t *testing.T) {
+	directory := t.TempDir()
+	for name, data := range map[string]string{
+		"10-last.JPG":   "image",
+		"02-middle.png": "image",
+		"01-first.webp": "image",
+		"notes.txt":     "ignored",
+	} {
+		if err := os.WriteFile(filepath.Join(directory, name), []byte(data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cfg := config.Default()
+	cfg.MediaRoots = []string{directory}
+	got, err := resolveSlideshowTargets(cfg, directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	realDirectory, err := filepath.EvalSymlinks(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		filepath.Join(realDirectory, "01-first.webp"),
+		filepath.Join(realDirectory, "02-middle.png"),
+		filepath.Join(realDirectory, "10-last.JPG"),
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("slideshow targets = %#v, want %#v", got, want)
 	}
 }
 

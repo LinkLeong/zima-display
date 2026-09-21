@@ -465,6 +465,16 @@ func (s *Server) action(w http.ResponseWriter, r *http.Request) {
 		if err == nil {
 			err = s.player.Play(ctx, resolved)
 		}
+	case "slideshow":
+		duration := request.Value
+		if duration == 0 {
+			duration = 8
+		}
+		var images []string
+		images, err = resolveSlideshowTargets(s.config.Get(), request.Path)
+		if err == nil {
+			err = s.player.Slideshow(ctx, images, duration)
+		}
 	case "pause":
 		err = s.player.Pause(ctx, true)
 	case "resume":
@@ -666,6 +676,40 @@ func resolveTarget(cfg config.Config, target string) (string, error) {
 		return "", errors.New("unsupported media file type")
 	}
 	return path, nil
+}
+
+func resolveSlideshowTargets(cfg config.Config, requested string) ([]string, error) {
+	directory, err := resolveLocalPath(cfg, requested, true)
+	if err != nil {
+		return nil, err
+	}
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		return nil, err
+	}
+	images := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.Type()&os.ModeSymlink != 0 || entry.IsDir() || mediaKind(entry.Name(), false) != "image" {
+			continue
+		}
+		info, infoErr := entry.Info()
+		if infoErr != nil || !info.Mode().IsRegular() {
+			continue
+		}
+		images = append(images, filepath.Join(directory, entry.Name()))
+	}
+	sort.Slice(images, func(i, j int) bool {
+		left := strings.ToLower(filepath.Base(images[i]))
+		right := strings.ToLower(filepath.Base(images[j]))
+		if left == right {
+			return images[i] < images[j]
+		}
+		return left < right
+	})
+	if len(images) == 0 {
+		return nil, errors.New("media directory contains no supported images")
+	}
+	return images, nil
 }
 
 func resolveLocalPath(cfg config.Config, requested string, requireDirectory bool) (string, error) {

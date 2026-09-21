@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file. The project fol
 
 ## [Unreleased]
 
+### Added
+
+- Added an exhibition slideshow action that loops images from the current media folder with a configurable interval.
+
+### Changed
+
+- Made video and media playlists loop continuously until the user stops or switches display mode.
+
 ## [0.4.1] - 2026-09-07
 
 ### Fixed
