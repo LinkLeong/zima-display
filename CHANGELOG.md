@@ -10,7 +10,11 @@ All notable changes to this project are documented in this file. The project fol
 
 ### Changed
 
-- Made video and media playlists loop continuously until the user stops or switches display mode.
+- Made single videos and media playlists loop continuously until the user stops or switches display mode.
+
+### Fixed
+
+- Generated installable `.raw` packages on macOS when `mksquashfs` is available instead of leaving a stale package in `dist`.
 
 ## [0.4.1] - 2026-09-07
 

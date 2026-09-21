@@ -138,7 +138,11 @@ func (m *Manager) Play(ctx context.Context, targets []string) error {
 	defer m.mu.Unlock()
 	if err := m.runRendererOperationLocked(ctx, func() error {
 		m.closeOverlayLocked()
-		if err := m.setPlaybackOptionsLocked(ctx, "inf", "inf"); err != nil {
+		fileLoop := "no"
+		if len(targets) == 1 {
+			fileLoop = "inf"
+		}
+		if err := m.setPlaybackOptionsLocked(ctx, "inf", fileLoop, "inf"); err != nil {
 			return err
 		}
 		return m.loadPlaylistLocked(ctx, targets)
@@ -162,7 +166,7 @@ func (m *Manager) Slideshow(ctx context.Context, images []string, durationSecond
 	defer m.mu.Unlock()
 	if err := m.runRendererOperationLocked(ctx, func() error {
 		m.closeOverlayLocked()
-		if err := m.setPlaybackOptionsLocked(ctx, "inf", durationSeconds); err != nil {
+		if err := m.setPlaybackOptionsLocked(ctx, "inf", "no", durationSeconds); err != nil {
 			return err
 		}
 		return m.loadPlaylistLocked(ctx, images)
@@ -185,7 +189,7 @@ func (m *Manager) Present(ctx context.Context, id, title, kind string, pages []s
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if err := m.runRendererOperationLocked(ctx, func() error {
-		if err := m.setPlaybackOptionsLocked(ctx, "no", "inf"); err != nil {
+		if err := m.setPlaybackOptionsLocked(ctx, "no", "no", "inf"); err != nil {
 			return err
 		}
 		if kind == "text" {
@@ -241,7 +245,7 @@ func (m *Manager) showGeneratedModeLocked(ctx context.Context, mode string) erro
 	if mode == "canvas" && cfg.Canvas.BackgroundType == "image" && cfg.Canvas.BackgroundImage != "" {
 		source = cfg.Canvas.BackgroundImage
 	}
-	if err := m.setPlaybackOptionsLocked(ctx, "no", "inf"); err != nil {
+	if err := m.setPlaybackOptionsLocked(ctx, "no", "no", "inf"); err != nil {
 		return err
 	}
 	if err := m.send(ctx, []any{"loadfile", source, "replace"}, nil); err != nil {
@@ -430,8 +434,11 @@ func (m *Manager) Status(ctx context.Context) Status {
 	return status
 }
 
-func (m *Manager) setPlaybackOptionsLocked(ctx context.Context, playlistLoop, imageDuration any) error {
+func (m *Manager) setPlaybackOptionsLocked(ctx context.Context, playlistLoop, fileLoop, imageDuration any) error {
 	if err := m.send(ctx, []any{"set_property", "loop-playlist", playlistLoop}, nil); err != nil {
+		return err
+	}
+	if err := m.send(ctx, []any{"set_property", "loop-file", fileLoop}, nil); err != nil {
 		return err
 	}
 	return m.send(ctx, []any{"set_property", "image-display-duration", imageDuration}, nil)

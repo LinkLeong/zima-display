@@ -32,9 +32,9 @@ rm -f "$STAGE_PACKAGE"
 COPYFILE_DISABLE=1 tar --no-xattrs -C "$BUILD_DIR" -czf "$STAGE_PACKAGE" raw install.sh
 echo "Created $STAGE_PACKAGE"
 
-if [ "$(uname -s)" = Darwin ] || ! command -v mksquashfs >/dev/null 2>&1; then
+if ! command -v mksquashfs >/dev/null 2>&1; then
     echo "Staged raw filesystem at $RAW_DIR"
-    echo "Build the .raw package on Linux or ZimaOS for zpkg compatibility."
+    echo "Install mksquashfs or build the .raw package on Linux or ZimaOS."
     exit 0
 fi
 

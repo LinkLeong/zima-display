@@ -228,6 +228,7 @@ func TestDashboardModeLoadsGeneratedVideo(t *testing.T) {
 	want := [][]any{
 		{"get_property", "idle-active"},
 		{"set_property", "loop-playlist", "no"},
+		{"set_property", "loop-file", "no"},
 		{"set_property", "image-display-duration", "inf"},
 		{"loadfile", dashboardVideoSource, "replace"},
 		{"set_property", "pause", false},
@@ -293,15 +294,15 @@ func TestMediaPlaybackAndSlideshowConfigureInfiniteLoops(t *testing.T) {
 
 	manager := New(socketPath, directory, config.Default)
 	manager.runner = readyRunner{}
-	if err := manager.Play(context.Background(), []string{"/DATA/demo-a.mp4", "/DATA/demo-b.mp4"}); err != nil {
+	if err := manager.Play(context.Background(), []string{"/DATA/demo.mp4"}); err != nil {
 		t.Fatal(err)
 	}
 	want := [][]any{
 		{"get_property", "idle-active"},
 		{"set_property", "loop-playlist", "inf"},
+		{"set_property", "loop-file", "inf"},
 		{"set_property", "image-display-duration", "inf"},
-		{"loadfile", "/DATA/demo-a.mp4", "replace"},
-		{"loadfile", "/DATA/demo-b.mp4", "append-play"},
+		{"loadfile", "/DATA/demo.mp4", "replace"},
 		{"set_property", "pause", false},
 	}
 	for index := range want {
@@ -324,6 +325,7 @@ func TestMediaPlaybackAndSlideshowConfigureInfiniteLoops(t *testing.T) {
 	want = [][]any{
 		{"get_property", "idle-active"},
 		{"set_property", "loop-playlist", "inf"},
+		{"set_property", "loop-file", "no"},
 		{"set_property", "image-display-duration", float64(8)},
 		{"loadfile", "/DATA/poster.jpg", "replace"},
 		{"set_property", "pause", false},
