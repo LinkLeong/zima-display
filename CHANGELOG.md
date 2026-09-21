@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file. The project fol
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-09-21
+
 ### Added
 
 - Added an exhibition slideshow action that loops images from the current media folder with a configurable interval.
