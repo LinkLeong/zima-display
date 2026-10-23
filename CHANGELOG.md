@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file. The project fol
 
 ## [Unreleased]
 
+### Fixed
+
+- Recovered the persistent local package after reboot when ZimaOS does not restore its volatile system-extension registration. A standalone helper in `/etc` waits for storage, registers only Zima Display through `/run/extensions`, merges it and starts the control service.
+- Retried boot recovery when storage or extension merging is not ready, and reconciled watchdog activation even after an interrupted install left unchanged unit files.
+- Disabled terminal hangup in the HDMI renderer service to prevent the renderer/supervisor from exiting during terminal handover.
+- Made the HDMI renderer conflict with and start after both tty1 console providers, including ZimaOS Welcome, so its delayed boot-time startup cannot hang up an already running renderer.
+
 ## [0.4.3] - 2026-10-21
 
 ### Added

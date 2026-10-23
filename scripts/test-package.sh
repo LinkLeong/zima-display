@@ -29,6 +29,19 @@ done
 [ -x "$TEST_DIR/raw/usr/bin/zima-displayctl" ]
 [ -x "$TEST_DIR/raw/usr/libexec/zima-display/start-renderer" ]
 cmp "$PROJECT_DIR/packaging/raw/usr/libexec/zima-display/start-renderer" "$TEST_DIR/raw/usr/libexec/zima-display/start-renderer"
+cmp "$PROJECT_DIR/packaging/raw/usr/lib/systemd/system/zima-display-renderer.service" "$TEST_DIR/raw/usr/lib/systemd/system/zima-display-renderer.service"
+grep -qx 'TTYVHangup=no' "$TEST_DIR/raw/usr/lib/systemd/system/zima-display-renderer.service" || {
+    echo "renderer must not hang up its own HDMI terminal" >&2
+    exit 1
+}
+for console in getty@tty1.service zimaos-welcome@tty1.service; do
+    for directive in Conflicts After; do
+        if ! sed -n "s/^$directive=//p" "$TEST_DIR/raw/usr/lib/systemd/system/zima-display-renderer.service" | tr ' ' '\n' | grep -Fxq "$console"; then
+            echo "renderer must have $directive=$console for exclusive, ordered tty1 ownership" >&2
+            exit 1
+        fi
+    done
+done
 
 case "$(uname -s)" in
     Linux)

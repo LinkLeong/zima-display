@@ -152,8 +152,26 @@ while systemctl is-active --quiet zima-display-renderer.service && [ "$remaining
 done
 systemctl is-active --quiet zima-display-renderer.service && fail "renderer remained active in terminal mode"
 systemctl is-active --quiet getty@tty1.service || fail "getty@tty1.service is not active in terminal mode"
+# Welcome uses Type=idle and may acquire tty1 after systemctl reports it started.
+# Immediately taking the screen back reproduces the boot-time console race.
+welcome_state=$(systemctl show zimaos-welcome@tty1.service --property=LoadState --value)
+if [ "$welcome_state" = loaded ]; then
+    systemctl start zimaos-welcome@tty1.service || fail "cannot start ZimaOS Welcome for the console handoff regression"
+    systemctl is-active --quiet zimaos-welcome@tty1.service || fail "ZimaOS Welcome did not start"
+fi
 api_mode dashboard || fail "dashboard request failed after terminal mode"
 wait_for_renderer || fail "renderer did not recover after terminal mode"
+for console in getty@tty1.service zimaos-welcome@tty1.service; do
+    if systemctl is-active --quiet "$console"; then
+        fail "$console is still competing for tty1 with the renderer"
+    fi
+done
+handoff_pid=$(systemctl show zima-display-renderer.service --property=MainPID --value)
+sleep 6
+[ "$(systemctl show zima-display-renderer.service --property=MainPID --value)" = "$handoff_pid" ] || fail "renderer exited after the delayed console handoff"
+systemctl is-active --quiet zima-display-renderer.service || fail "renderer stopped after the delayed console handoff"
+status_renderer_ready || fail "API did not report renderer_ready after the delayed console handoff"
+echo "Exclusive tty1 console handoff passed"
 
 find_renderer_process || fail "cannot find the mpv renderer process"
 kill -9 "$RENDERER_PID"

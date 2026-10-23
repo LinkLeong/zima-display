@@ -1,8 +1,9 @@
 [Unit]
 Description=Zima Display HDMI renderer
-After=systemd-logind.service local-fs.target
+After=systemd-logind.service local-fs.target getty@tty1.service zimaos-welcome@tty1.service
 PartOf=zima-display.service
-Conflicts=getty@tty1.service
+# Both console providers can hang up tty1; finish stopping them before taking it.
+Conflicts=getty@tty1.service zimaos-welcome@tty1.service
 
 [Service]
 Type=simple
@@ -16,5 +17,6 @@ StandardInput=tty-force
 StandardOutput=journal
 StandardError=journal
 TTYReset=yes
-TTYVHangup=yes
+# The renderer owns tty1. Hanging it up also terminates mpv/the supervisor.
+TTYVHangup=no
 TTYVTDisallocate=yes

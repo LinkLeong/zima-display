@@ -116,6 +116,7 @@ Automation values: **CI** runs on every push, **Device** runs through `test-devi
 | REN-10 | Service restart | Restart control and renderer services three times | Each cycle becomes IPC-ready within 20 seconds | Device |
 | REN-11 | Reboot behavior | Reboot with auto-start enabled and disabled | Enabled starts configured mode; disabled leaves terminal | Manual |
 | REN-12 | No user-visible IPC error | Exercise modes during recovery | UI never leaves `connection refused/reset` as a permanent error | Device + Manual |
+| REN-13 | Exclusive tty1 ownership | Check the packaged unit; run `test-device-renderer.sh`, then reboot with ZimaOS Welcome enabled | Both console providers appear in renderer `Conflicts` and `After`; the delayed Welcome-to-dashboard handoff stays ready; Welcome/getty are stopped before renderer startup | CI package + Device + Manual reboot |
 
 ### Display modes, dashboard and canvas
 

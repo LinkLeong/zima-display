@@ -9,12 +9,12 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"syscall"
 	"time"
 
+	"zima-display/internal/boot"
 	"zima-display/internal/config"
 	"zima-display/internal/gateway"
 	"zima-display/internal/metrics"
@@ -79,7 +79,7 @@ func main() {
 	}
 	logger.Printf("version %s listening on http://%s", version, listener.Addr())
 	gateway.RegisterAsync(ctx, logger, *casaRuntimePath, "/zima-display", "http://"+listener.Addr().String())
-	installBootWatchdog(logger)
+	boot.Install(logger)
 
 	if _, err := os.Stat("/run/systemd/system"); err == nil && store.Get().AutoStart {
 		go func() {
@@ -136,74 +136,6 @@ func collectMetrics(ctx context.Context, logger *log.Logger, store *config.Store
 		case <-ctx.Done():
 			return
 		case <-time.After(interval):
-		}
-	}
-}
-
-func installBootWatchdog(logger *log.Logger) {
-	if os.Geteuid() != 0 {
-		return
-	}
-	if _, err := os.Stat("/run/systemd/system"); err != nil {
-		return
-	}
-	units := map[string]string{
-		"/etc/systemd/system/zima-display-watchdog.service": `[Unit]
-Description=Start Zima Display after system extensions are merged
-After=systemd-sysext.service
-
-[Service]
-Type=oneshot
-ExecStart=/bin/sh -c 'systemctl is-active --quiet zima-display.service || systemctl start zima-display.service'
-`,
-		"/etc/systemd/system/zima-display-watchdog.timer": `[Unit]
-Description=Ensure Zima Display starts after boot
-
-[Timer]
-OnBootSec=15
-
-[Install]
-WantedBy=timers.target
-`,
-		"/etc/systemd/system/zima-display-refresh.path": `[Unit]
-Description=Watch for Zima Display extension updates
-
-[Path]
-PathChanged=/usr/bin/zima-displayd
-
-[Install]
-WantedBy=multi-user.target
-`,
-		"/etc/systemd/system/zima-display-refresh.service": `[Unit]
-Description=Restart Zima Display after an extension update
-
-[Service]
-Type=oneshot
-ExecStart=/bin/sh -c 'sleep 2; systemctl restart zima-display.service'
-`,
-	}
-	changed := false
-	for path, content := range units {
-		current, err := os.ReadFile(path)
-		if err == nil && string(current) == content {
-			continue
-		}
-		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-			logger.Printf("install watchdog unit %s: %v", path, err)
-			return
-		}
-		changed = true
-	}
-	if !changed {
-		return
-	}
-	if err := exec.Command("systemctl", "daemon-reload").Run(); err != nil {
-		logger.Printf("reload systemd after watchdog install: %v", err)
-		return
-	}
-	for _, unit := range []string{"zima-display-watchdog.timer", "zima-display-refresh.path"} {
-		if err := exec.Command("systemctl", "enable", "--now", unit).Run(); err != nil {
-			logger.Printf("enable %s: %v", unit, err)
 		}
 	}
 }

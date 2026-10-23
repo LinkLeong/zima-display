@@ -38,7 +38,10 @@ jobs:
           node scripts/test-settings-ui.mjs
 
       - name: Check shell syntax
-        run: sh -n scripts/*.sh packaging/raw/usr/libexec/zima-display/start-renderer
+        run: |
+          for script in scripts/*.sh packaging/raw/usr/libexec/zima-display/start-renderer internal/boot/recover-extension.sh; do
+            sh -n "$script"
+          done
 
       - name: Test renderer fallback
         run: ./scripts/test-renderer-fallback.sh
